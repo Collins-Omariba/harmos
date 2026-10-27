@@ -1,0 +1,140 @@
+// Harmos data model
+// SQLite via Prisma. Every record except Project belongs to a Project.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  brief     String
+  status    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements         Requirement[]
+  resources            Resource[]
+  components           Component[]
+  comparisonCandidates ComparisonCandidate[]
+  artifacts            Artifact[]
+  edges                Edge[]
+  decisions            Decision[]
+  validationTests      ValidationTest[]
+}
+
+model Requirement {
+  id        String @id @default(cuid())
+  projectId String
+  text      String
+  kind      String
+  status    String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Resource {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  url         String
+  kind        String
+  summary     String
+  retrievedAt DateTime
+  tags        String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Component {
+  id           String  @id @default(cuid())
+  projectId    String
+  partNumber   String
+  manufacturer String
+  package      String
+  datasheetUrl String?
+  notes        String?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ComparisonCandidate {
+  id           String @id @default(cuid())
+  projectId    String
+  partNumber   String
+  manufacturer String
+  dataJson     String
+  verdict      String
+  reason       String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Artifact {
+  id        String @id @default(cuid())
+  projectId String
+  kind      String
+  name      String
+  version   String
+  hash      String
+  metaJson  String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  edgesFrom Edge[] @relation("EdgeFrom")
+  edgesTo   Edge[] @relation("EdgeTo")
+
+  @@index([projectId])
+}
+
+model Edge {
+  id             String @id @default(cuid())
+  projectId      String
+  fromArtifactId String
+  toArtifactId   String
+  kind           String
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fromArtifact Artifact @relation("EdgeFrom", fields: [fromArtifactId], references: [id], onDelete: Cascade)
+  toArtifact   Artifact @relation("EdgeTo", fields: [toArtifactId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([fromArtifactId])
+  @@index([toArtifactId])
+}
+
+model Decision {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  rationale String
+  decidedAt DateTime
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ValidationTest {
+  id        String  @id @default(cuid())
+  projectId String
+  name      String
+  status    String
+  notes     String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
