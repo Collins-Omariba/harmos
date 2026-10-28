@@ -84,7 +84,7 @@ async function logEntry(cacheKey: string) {
 test("runTask throws a helpful error without a configured key", async () => {
   const cacheDir = `/tmp/opencode/harmos-client-nokey-${process.pid}`;
   const previous = setEnv({
-    OPENAI_API_KEY: "your_key_here",
+    AI_API_KEY: "your_key_here",
     HARMOS_CACHE_DIR: cacheDir,
     HARMOS_DEMO_MODE: undefined,
   });
@@ -92,7 +92,7 @@ test("runTask throws a helpful error without a configured key", async () => {
   try {
     await assert.rejects(
       runTask("probe_task", inputSchema, outputSchema, PROMPT),
-      /OPENAI_API_KEY is not configured/,
+      /AI_API_KEY is not configured/,
     );
 
     const key = taskCacheKey("probe_task", PROMPT, inputSchema);
@@ -110,9 +110,9 @@ test("runTask calls the model, validates, caches, and logs real tokens", async (
     completionBody(JSON.stringify({ answer: 42 })),
   );
   const previous = setEnv({
-    OPENAI_API_KEY: "test-key",
-    OPENAI_BASE_URL: `http://127.0.0.1:${port}`,
-    HARMOS_AI_MODEL: "test-model",
+    AI_API_KEY: "test-key",
+    AI_BASE_URL: `http://127.0.0.1:${port}`,
+    AI_MODEL: "test-model",
     HARMOS_CACHE_DIR: cacheDir,
     HARMOS_DEMO_MODE: undefined,
   });
@@ -151,9 +151,9 @@ test("runTask rejects non-JSON model output loudly", async () => {
   const cacheDir = `/tmp/opencode/harmos-client-garbage-${process.pid}`;
   const { server, port } = await startFakeOpenAI(() => completionBody("hello there"));
   const previous = setEnv({
-    OPENAI_API_KEY: "test-key",
-    OPENAI_BASE_URL: `http://127.0.0.1:${port}`,
-    HARMOS_AI_MODEL: "test-model",
+    AI_API_KEY: "test-key",
+    AI_BASE_URL: `http://127.0.0.1:${port}`,
+    AI_MODEL: "test-model",
     HARMOS_CACHE_DIR: cacheDir,
     HARMOS_DEMO_MODE: undefined,
   });
@@ -180,9 +180,9 @@ test("runTask rejects schema-violating model output loudly", async () => {
     completionBody(JSON.stringify({ wrong: true })),
   );
   const previous = setEnv({
-    OPENAI_API_KEY: "test-key",
-    OPENAI_BASE_URL: `http://127.0.0.1:${port}`,
-    HARMOS_AI_MODEL: "test-model",
+    AI_API_KEY: "test-key",
+    AI_BASE_URL: `http://127.0.0.1:${port}`,
+    AI_MODEL: "test-model",
     HARMOS_CACHE_DIR: cacheDir,
     HARMOS_DEMO_MODE: undefined,
   });

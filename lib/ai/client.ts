@@ -14,19 +14,19 @@ import { z } from "zod";
  * - Every task is structured-output, cached on disk, and logged.
  * - This file is the only place that may reference the OpenAI SDK. The
  *   signature is OpenAI-compatible and provider-agnostic: swap
- *   OPENAI_BASE_URL and HARMOS_AI_MODEL to move providers.
+ *   AI_BASE_URL and AI_MODEL to move providers.
  *
  * runTask() behavior:
  * 1. Return a valid disk-cache hit before doing any work.
  * 2. In demo mode (HARMOS_DEMO_MODE=1) a miss throws instead of calling the
  *    network, so the demo cannot silently go live.
- * 3. Without a configured OPENAI_API_KEY a miss throws with setup help.
+ * 3. Without a configured AI_API_KEY a miss throws with setup help.
  * 4. Otherwise it makes one OpenAI-compatible JSON call, validates the
  *    response against the output schema, writes the cache, and logs the
  *    call with real token counts.
  */
 
-export const DEFAULT_OPENAI_BASE_URL = "https://api.meta.ai/v1";
+export const DEFAULT_AI_BASE_URL = "https://api.meta.ai/v1";
 export const DEFAULT_AI_MODEL = "muse-spark-1.3";
 
 export type AiTaskStatus =
@@ -65,13 +65,13 @@ export type AiConfig = {
 
 export function getAiConfig(): AiConfig {
   return {
-    baseUrl: process.env.OPENAI_BASE_URL ?? DEFAULT_OPENAI_BASE_URL,
-    model: process.env.HARMOS_AI_MODEL ?? DEFAULT_AI_MODEL,
+    baseUrl: process.env.AI_BASE_URL ?? DEFAULT_AI_BASE_URL,
+    model: process.env.AI_MODEL ?? DEFAULT_AI_MODEL,
     cacheDir: process.env.HARMOS_CACHE_DIR ?? "./.cache",
     demoMode: process.env.HARMOS_DEMO_MODE === "1",
     apiKeyConfigured: Boolean(
-      process.env.OPENAI_API_KEY &&
-        process.env.OPENAI_API_KEY !== "your_key_here",
+      process.env.AI_API_KEY &&
+        process.env.AI_API_KEY !== "your_key_here",
     ),
   };
 }
@@ -84,7 +84,7 @@ export function createOpenAIClient(): OpenAI {
   const { baseUrl } = getAiConfig();
 
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY ?? "not_configured",
+    apiKey: process.env.AI_API_KEY ?? "not_configured",
     baseURL: baseUrl,
   });
 }
@@ -284,7 +284,7 @@ export async function runTask<T>(
       error,
     });
     throw new Error(
-      "OPENAI_API_KEY is not configured. Put a real provider key in .env (it must not be the your_key_here placeholder) to enable live AI tasks.",
+      "AI_API_KEY is not configured. Put a real provider key in .env (it must not be the your_key_here placeholder) to enable live AI tasks.",
     );
   }
 

@@ -123,9 +123,9 @@ export function ComparisonRunner({
             Pick a category and candidates
           </h3>
           <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
-            Scoring runs in code against the project constraints. The AI only
-            explains the trade-offs it is given; it never changes a pass/fail
-            result.
+            Parts are scored against your constraints automatically. The AI
+            then explains the trade-offs in plain words — it can&apos;t change
+            a score.
           </p>
         </div>
         <Badge

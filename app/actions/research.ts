@@ -303,7 +303,7 @@ export async function runResourceSelectionAction(
     selections = result.selections;
   } catch {
     return fail(
-      "AI selection is unavailable (no cached response, no model configured). Select manually below — every toggle is stored.",
+      "AI selection needs an AI key — set AI_API_KEY in .env. Meanwhile, bookmark sources manually below; every toggle is stored.",
     );
   }
 

@@ -14,13 +14,22 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-const taskNames = [
-  "extract_requirements",
-  "clarifying_questions",
-  "select_resources",
-  "explain_comparison",
-  "suggest_constraints",
-  "explain_change_impact",
+const uses = [
+  {
+    title: "New project ideas",
+    description:
+      "Suggests extra constraints from your brief. You tick the ones you want.",
+  },
+  {
+    title: "Comparison explanations",
+    description:
+      "Turns pass/fail scores into plain-word trade-offs for each candidate.",
+  },
+  {
+    title: "Reference picks",
+    description:
+      "Shortlists the most relevant sources from your research index.",
+  },
 ];
 
 export function AssistantPanel() {
@@ -55,44 +64,49 @@ export function AssistantPanel() {
               </Badge>
             </div>
             <SheetDescription>
-              Task-shaped help: named, schema-validated AI calls that run only
-              when you ask for them. No free chat, no silent calls.
+              A helper that explains, suggests, and finds — only when you
+              ask it to. It never changes your data on its own.
             </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6 overflow-y-auto p-5">
             <div className="rounded-lg border border-dashed border-border bg-card/40 p-5">
               <p className="numeric text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                On demand, never chat
+                You stay in charge
               </p>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Tasks run only when you ask — a comparison run, a suggestion
-                round, a resource selection. Each call is validated, cached on
-                disk so repeats are free, and logged with tokens and latency.
+                The AI proposes — you decide. Nothing is stored until you
+                confirm it, and asking twice is instant and free because
+                answers are saved and reused.
               </p>
             </div>
 
             <div>
               <div className="mb-3 flex items-center justify-between">
                 <h3 className="numeric text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                  Task contract
+                  Where it helps
                 </h3>
                 <span className="numeric text-[10px] text-muted-foreground">
-                  6
+                  3
                 </span>
               </div>
               <ol className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card/50">
-                {taskNames.map((name, index) => (
+                {uses.map((use, index) => (
                   <li
-                    key={name}
-                    className="flex items-center gap-3 px-3 py-2.5"
+                    key={use.title}
+                    className="flex items-start gap-3 px-3 py-2.5"
                   >
-                    <span className="numeric text-[10px] text-muted-foreground">
+                    <span className="numeric pt-0.5 text-[10px] text-muted-foreground">
                       {String(index + 1).padStart(2, "0")}
                     </span>
-                    <code className="numeric text-xs text-foreground">
-                      {name}
-                    </code>
+                    <span>
+                      <span className="block text-xs font-medium text-foreground">
+                        {use.title}
+                      </span>
+                      <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                        {use.description}
+                      </span>
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -103,26 +117,26 @@ export function AssistantPanel() {
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-md border border-border bg-muted/30 p-3">
                 <p className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Cache
+                  Free repeats
                 </p>
-                <p className="numeric mt-1.5 text-[11px] text-foreground">
-                  .cache/ai/
+                <p className="mt-1.5 text-[11px] leading-relaxed text-foreground">
+                  Ask twice, pay once
                 </p>
               </div>
               <div className="rounded-md border border-border bg-muted/30 p-3">
                 <p className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Log
+                  Full history
                 </p>
-                <p className="numeric mt-1.5 text-[11px] text-foreground">
-                  logs/ai.log
+                <p className="mt-1.5 text-[11px] leading-relaxed text-foreground">
+                  Every answer recorded
                 </p>
               </div>
             </div>
 
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Deterministic checks — constraint satisfaction, dependency
-              ripples, BOM totals, and version resolution — stay in code, not in
-              the model.
+              The AI never decides pass or fail. Scores, totals, and shortlists
+              are always worked out exactly — the AI only explains them in
+              plain words.
             </p>
           </div>
         </SheetContent>

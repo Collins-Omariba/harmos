@@ -49,12 +49,12 @@ const statusRank: Record<CandidateStatus, number> = {
 
 function explanationLabel(status: string): string {
   if (status === "explained") {
-    return "AI explanation (cached)";
+    return "Explained by AI";
   }
   if (status === "deterministic") {
-    return "Deterministic summary";
+    return "Auto summary";
   }
-  return "AI explanation unavailable";
+  return "AI unavailable";
 }
 
 export function ComparisonTab({
@@ -174,8 +174,8 @@ export function ComparisonTab({
               </p>
               <p className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <FlaskConical className="size-3 text-accent" />
-                Hard constraints were scored in code. The AI layer only writes
-                explanation prose.
+                Scores are worked out exactly, not guessed. The AI only writes
+                the explanation.
               </p>
             </>
           ) : (

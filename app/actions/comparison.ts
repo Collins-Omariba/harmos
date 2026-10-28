@@ -46,7 +46,7 @@ export async function runComparisonAction(
 
     return {
       ok: true,
-      message: `Scored ${result.scores.length} candidates. ${result.explanationStatus === "explained" ? "AI explanation loaded from cache." : "Deterministic summary shown; AI explanation is not available yet."}`,
+      message: `Scored ${result.scores.length} candidates. ${result.explanationStatus === "explained" ? "AI explanation included." : "Showing the auto summary; set AI_API_KEY for AI explanations."}`,
     };
   } catch (error) {
     return {

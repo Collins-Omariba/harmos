@@ -121,12 +121,12 @@ test("select_resources drops unknown and duplicate ids", async () => {
 test("select_resources throws loudly on a cache miss (no silent empty)", async () => {
   const cacheDir = `/tmp/opencode/harmos-select-miss-${process.pid}`;
   const previousCacheDir = process.env.HARMOS_CACHE_DIR;
-  const previousKey = process.env.OPENAI_API_KEY;
+  const previousKey = process.env.AI_API_KEY;
   process.env.HARMOS_CACHE_DIR = cacheDir;
-  delete process.env.OPENAI_API_KEY;
+  delete process.env.AI_API_KEY;
 
   try {
-    await assert.rejects(selectResources(input), /OPENAI_API_KEY is not configured/);
+    await assert.rejects(selectResources(input), /AI_API_KEY is not configured/);
   } finally {
     if (previousCacheDir === undefined) {
       delete process.env.HARMOS_CACHE_DIR;
@@ -134,9 +134,9 @@ test("select_resources throws loudly on a cache miss (no silent empty)", async (
       process.env.HARMOS_CACHE_DIR = previousCacheDir;
     }
     if (previousKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
+      delete process.env.AI_API_KEY;
     } else {
-      process.env.OPENAI_API_KEY = previousKey;
+      process.env.AI_API_KEY = previousKey;
     }
     await rm(cacheDir, { recursive: true, force: true });
   }

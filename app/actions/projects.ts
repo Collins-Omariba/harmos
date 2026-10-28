@@ -93,7 +93,7 @@ export async function suggestConstraintsAction(input: {
         kind: suggestion.kind as string,
       })),
       source: result.source,
-      error: result.error,
+      error: result.error ? friendlyAiError(result.error) : undefined,
     };
   } catch {
     return {
@@ -101,6 +101,22 @@ export async function suggestConstraintsAction(input: {
       source: "rules",
     };
   }
+}
+
+function friendlyAiError(raw: string): string {
+  if (raw.includes("AI_API_KEY is not configured")) {
+    return "Add your AI key in .env to enable AI suggestions — showing rule-based ones for now.";
+  }
+  if (raw.includes("demo_mode_cache_miss")) {
+    return "Demo mode is on, so no AI call was made — showing rule-based suggestions.";
+  }
+  if (raw.startsWith("ai_invalid_")) {
+    return "The AI reply came back in the wrong shape — showing rule-based suggestions instead.";
+  }
+  if (raw.includes("web_search_")) {
+    return raw;
+  }
+  return "The AI call failed — showing rule-based suggestions instead.";
 }
 
 export type NewProjectState = {
