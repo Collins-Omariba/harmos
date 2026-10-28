@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { selectResources } from "@/lib/ai/tasks/select_resources";
+import { selectTopResources } from "@/lib/research/heuristic";
 import { catalog } from "@/lib/catalog";
 import { liveWebSearch, RESOURCE_KINDS } from "@/lib/research";
 import { prisma } from "@/lib/db";
@@ -281,6 +282,7 @@ export async function runResourceSelectionAction(
   }
 
   let selections: { id: string; note: string }[];
+  let source: "ai" | "heuristic" = "ai";
   try {
     const result = await selectResources({
       project: { name: project.name, brief: project.brief },
@@ -302,9 +304,31 @@ export async function runResourceSelectionAction(
     });
     selections = result.selections;
   } catch {
-    return fail(
-      "AI selection needs an AI key — set AI_API_KEY in .env. Meanwhile, bookmark sources manually below; every toggle is stored.",
+    const heuristic = selectTopResources(
+      project.resources.map((resource) => ({
+        id: resource.id,
+        title: resource.title,
+        summary: resource.summary,
+        tags: resource.tags
+          .split(/[,;]/)
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      })),
+      project.brief,
+      3,
     );
+
+    if (heuristic.length === 0) {
+      return fail(
+        "Neither the AI nor keyword matching found anything — index sources covering the brief first.",
+      );
+    }
+
+    selections = heuristic.map((entry) => ({
+      id: entry.id,
+      note: `Heuristic pick while the AI is unavailable: matches ${entry.matched.slice(0, 3).join(", ")}. Confirm or adjust below.`,
+    }));
+    source = "heuristic";
   }
 
   const notes = new Map(selections.map((s) => [s.id, s.note]));
@@ -322,11 +346,18 @@ export async function runResourceSelectionAction(
   );
 
   revalidatePath(`/projects/${projectId}`);
+  if (selections.length === 0) {
+    return {
+      ok: true,
+      message:
+        "The model selected nothing — the index may not cover this brief yet.",
+    };
+  }
   return {
     ok: true,
     message:
-      selections.length > 0
-        ? `Selected ${selections.length} of ${project.resources.length} indexed sources.`
-        : "The model selected nothing — the index may not cover this brief yet.",
+      source === "heuristic"
+        ? `AI unavailable — applied a heuristic shortlist of ${selections.length}. Confirm or adjust below.`
+        : `Selected ${selections.length} of ${project.resources.length} indexed sources.`,
   };
 }

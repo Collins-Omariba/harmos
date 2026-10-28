@@ -8,6 +8,7 @@ import {
 
 import { deleteProjectAction } from "@/app/actions/records";
 import { ArtifactManager } from "@/components/artifact-manager";
+import { AssistantFab } from "@/components/assistant-fab";
 import { ComparisonTab } from "@/components/comparison-tab";
 import { ComponentManager } from "@/components/component-manager";
 import { DecisionManager } from "@/components/decision-manager";
@@ -351,6 +352,7 @@ export default async function ProjectPage({
           />
         </TabsContent>
       </Tabs>
+      <AssistantFab projectId={project.id} projectName={project.name} />
     </div>
   );
 }

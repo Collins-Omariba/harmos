@@ -175,7 +175,7 @@ export function DeleteButton({
         type="button"
         variant="ghost"
         size="icon"
-        className="size-7 text-muted-foreground hover:text-destructive"
+        className="size-7 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
         aria-label={label}
         onClick={() => setArmed(true)}
       >

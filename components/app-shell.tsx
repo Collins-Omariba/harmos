@@ -4,8 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 
-import { AssistantPanel } from "@/components/assistant-panel";
-import { GlobalSearch } from "@/components/global-search";
 import { NewProjectButton } from "@/components/new-project-button";
 import { ProjectNavList, LibraryNav } from "@/components/project-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -106,9 +104,6 @@ export function AppShell({
         <span className="numeric hidden text-[10px] uppercase tracking-[0.2em] text-primary xl:inline">
           Engineering workspace
         </span>
-        <div className="mx-2 min-w-0 flex-1 sm:mx-4">
-          <GlobalSearch />
-        </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <span className="numeric mr-2 hidden text-[10px] uppercase tracking-[0.16em] text-muted-foreground lg:inline">
             local / no account
@@ -122,7 +117,6 @@ export function AppShell({
         <main className="schematic-grid min-w-0 flex-1 overflow-y-auto">
           {children}
         </main>
-        <AssistantPanel />
       </div>
     </div>
   );
