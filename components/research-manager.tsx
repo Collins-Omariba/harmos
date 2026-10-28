@@ -6,26 +6,27 @@ import {
   BookmarkCheck,
   ExternalLink,
   Globe,
+  Plus,
   Sparkles,
 } from "lucide-react";
 
-import {
-  createResourceAction,
-  deleteResourceAction,
-  importCatalogResourcesAction,
-  runResourceSelectionAction,
-  runWebSearchAction,
-  setResourceSelectionAction,
-  updateResourceAction,
-} from "@/app/actions/research";
+import { createResourceAction, deleteResourceAction, fetchResourceDetails, importCatalogResourcesAction, runResourceSelectionAction, runWebSearchAction, setResourceSelectionAction, updateResourceAction } from "@/app/actions/research";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import { formatDate, padCount } from "@/lib/format";
 import { RESOURCE_KINDS } from "@/lib/research";
 import { cn } from "@/lib/utils";
 import {
-  AddButton,
   DeleteButton,
   EditButton,
   Field,
@@ -61,6 +62,142 @@ function tagList(tags: string): string[] {
     .split(/[,;]/)
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function AddResourceDialog({ projectId }: { projectId: string }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetching, startFetching] = useTransition();
+  const [state, formAction, pending] = useActionState(
+    createResourceAction,
+    null,
+  );
+
+  function fetchDetails() {
+    setFetchError(null);
+    startFetching(async () => {
+      const result = await fetchResourceDetails({ url });
+      if ("error" in result) {
+        setFetchError(result.error);
+        return;
+      }
+      setTitle((current) => current || result.title);
+      setSummary((current) => current || result.summary);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Plus data-icon="inline-start" />
+          Add resource
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <form action={formAction}>
+          <HiddenFields fields={{ projectId }} />
+          <DialogHeader>
+            <DialogTitle>Add resource</DialogTitle>
+            <DialogDescription>
+              Paste a link first — title and summary fill themselves in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
+              <Field label="Link to the source" htmlFor="add-resource-url">
+                <div className="flex items-center gap-2">
+                  <TextInput
+                    id="add-resource-url"
+                    name="url"
+                    type="url"
+                    required
+                    value={url}
+                    onChange={(event) => setUrl(event.target.value)}
+                    placeholder="https://…"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={fetchDetails}
+                    disabled={fetching || url.trim().length < 8}
+                  >
+                    {fetching ? "Reading…" : "Fetch details"}
+                  </Button>
+                </div>
+              </Field>
+              {fetchError ? (
+                <p className="mt-2 text-[11px] text-destructive">{fetchError}</p>
+              ) : null}
+            </div>
+            <Field label="Title" htmlFor="add-resource-title">
+              <TextInput
+                id="add-resource-title"
+                name="title"
+                required
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="TPS7A02 datasheet"
+              />
+            </Field>
+            <Field label="Kind" htmlFor="add-resource-kind">
+              <NativeSelect id="add-resource-kind" name="kind" defaultValue="datasheet">
+                {RESOURCE_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {kind}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Summary" htmlFor="add-resource-summary">
+              <TextArea
+                id="add-resource-summary"
+                name="summary"
+                required
+                rows={3}
+                value={summary}
+                onChange={(event) => setSummary(event.target.value)}
+                placeholder="What this source covers and why it matters here."
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Retrieved on" htmlFor="add-resource-date">
+                <TextInput
+                  id="add-resource-date"
+                  name="retrievedAt"
+                  type="date"
+                  required
+                  defaultValue={todayInput()}
+                />
+              </Field>
+              <Field label="Tags (comma separated)" htmlFor="add-resource-tags">
+                <TextInput
+                  id="add-resource-tags"
+                  name="tags"
+                  placeholder="ldo, low-power"
+                />
+              </Field>
+            </div>
+            {state && !state.ok ? (
+              <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                {state.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Indexing…" : "Index resource"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function ResourceFields({ resource }: { resource?: ResourceRow }) {
@@ -266,12 +403,10 @@ export function ResearchManager({
   projectId,
   resources,
   catalogParts,
-  webSearch,
 }: {
   projectId: string;
   resources: ResourceRow[];
   catalogParts: CatalogPart[];
-  webSearch: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, startSelecting] = useTransition();
@@ -379,30 +514,20 @@ export function ResearchManager({
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search the web for datasheets…"
                 aria-label="Web search query"
-                disabled={!webSearch}
-                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={runSearch}
-                disabled={!webSearch || searching || query.trim().length < 3}
-                title={
-                  webSearch
-                    ? "Search the web via the AI model"
-                    : "Off — set HARMOS_WEB_SEARCH=1 once a search provider is wired"
-                }
+                disabled={searching || query.trim().length < 3}
+                title="Search the web via the AI model"
               >
                 <Globe data-icon="inline-start" />
                 {searching ? "Searching..." : "Web search"}
               </Button>
             </div>
-            {!webSearch ? (
-              <p className="numeric mt-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                Web search off · HARMOS_WEB_SEARCH=0
-              </p>
-            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -415,16 +540,7 @@ export function ResearchManager({
               {selecting ? "Selecting..." : "Run AI selection"}
             </Button>
             <ImportFromCatalog projectId={projectId} parts={catalogParts} />
-            <RecordDialog
-              title="Add resource"
-              description="Anything worth citing: datasheets, app notes, standards."
-              action={createResourceAction}
-              submitLabel="Index resource"
-              trigger={<AddButton label="Add resource" />}
-            >
-              <HiddenFields fields={{ projectId }} />
-              <ResourceFields />
-            </RecordDialog>
+            <AddResourceDialog projectId={projectId} />
           </div>
         </div>
 

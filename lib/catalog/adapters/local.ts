@@ -50,7 +50,9 @@ function toDomain(row: CatalogPartRow): CatalogPart {
     sourceRetrievedAt: row.sourceRetrievedAt.toISOString(),
     priceUsd: row.priceUsd,
     origin:
-      row.origin === "imported" || row.origin === "custom"
+      row.origin === "imported" ||
+      row.origin === "custom" ||
+      row.origin === "agent"
         ? row.origin
         : "seeded",
     tags: row.tags

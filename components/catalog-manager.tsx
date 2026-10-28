@@ -44,6 +44,7 @@ const ORIGIN_STYLES: Record<string, string> = {
   seeded: "border-border bg-muted/40 text-muted-foreground",
   imported: "border-accent/35 bg-accent/10 text-accent",
   custom: "border-primary/35 bg-primary/10 text-primary",
+  agent: "border-chart-2/40 bg-chart-2/10 text-chart-2",
 };
 
 function PartFields({ part }: { part?: CatalogPart }) {

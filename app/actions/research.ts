@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { selectResources } from "@/lib/ai/tasks/select_resources";
+import { findSources } from "@/lib/ai/tasks/find_sources";
 import { selectTopResources } from "@/lib/research/heuristic";
+import { fetchPageText } from "@/lib/fetch-page";
 import { catalog } from "@/lib/catalog";
-import { liveWebSearch, RESOURCE_KINDS } from "@/lib/research";
+import { RESOURCE_KINDS } from "@/lib/research";
 import { prisma } from "@/lib/db";
 
 export type ResearchActionState = {
@@ -132,6 +134,21 @@ export async function deleteResourceAction(
   return done(projectId, "Resource removed from the index.");
 }
 
+export async function fetchResourceDetails(input: { url: string }): Promise<
+  { title: string; summary: string } | { error: string }
+> {
+  const fetched = await fetchPageText(input.url);
+  if ("error" in fetched) {
+    return { error: fetched.error };
+  }
+  const title = fetched.title ?? input.url;
+  const summary = fetched.text.slice(0, 500);
+  if (!summary) {
+    return { error: "No readable text found — describe the source manually." };
+  }
+  return { title, summary };
+}
+
 export async function setResourceSelectionAction(
   _previous: ResearchActionState,
   formData: FormData,
@@ -248,19 +265,56 @@ export async function runWebSearchAction(
     return fail("Type a query first.");
   }
 
+  const existing = new Set(
+    (
+      await prisma.resource.findMany({
+        where: { projectId },
+        select: { url: true },
+      })
+    ).map((row) => row.url),
+  );
+
+  let added = 0;
   try {
-    await liveWebSearch(trimmed);
-    return fail("Web search returned nothing usable.");
-  } catch (error) {
-    const reason =
-      error instanceof Error ? error.message : "web search failed";
-    if (reason === "web_search_disabled") {
-      return fail("Web search is off (HARMOS_WEB_SEARCH=0).");
+    const { sources } = await findSources({
+      query: trimmed,
+      excludeUrls: [...existing],
+    });
+
+    for (const source of sources.slice(0, 8)) {
+      if (existing.has(source.url)) {
+        continue;
+      }
+      await prisma.resource.create({
+        data: {
+          projectId,
+          title: source.title.slice(0, 200),
+          url: source.url,
+          kind: "reference",
+          summary: source.snippet.slice(0, 500),
+          retrievedAt: new Date(),
+          tags: "web search",
+        },
+      });
+      existing.add(source.url);
+      added += 1;
     }
+  } catch (error) {
     return fail(
-      "Web search is not wired to a provider yet — index sources manually for now.",
+      error instanceof Error && error.message.includes("AI_API_KEY")
+        ? "Set AI_API_KEY in .env to use web search."
+        : "Web search failed — index sources manually for now.",
     );
   }
+
+  revalidatePath(`/projects/${projectId}`);
+  return {
+    ok: true,
+    message:
+      added > 0
+        ? `Indexed ${added} web source${added === 1 ? "" : "s"} — select the keepers below.`
+        : "Those sources are already indexed.",
+  };
 }
 
 export async function runResourceSelectionAction(

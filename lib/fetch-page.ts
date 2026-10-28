@@ -1,0 +1,158 @@
+/**
+ * Minimal server-side page fetch for user-pasted links. No search provider,
+ * no AI tokens: plain HTTP with strict caps, HTML-only extraction.
+ *
+ * Security posture: this is a local single-user tool, but we still refuse
+ * to fetch non-http(s) URLs, localhost/private hostnames, and oversized or
+ * non-HTML responses, and everything caps at FETCH_MAX_BYTES.
+ */
+
+export const FETCH_MAX_BYTES = 500_000;
+export const FETCH_TIMEOUT_MS = 15_000;
+export const EXTRACT_MAX_CHARS = 8_000;
+
+const BLOCKED_HOSTS = [
+  "localhost",
+  "127.",
+  "10.",
+  "169.254.",
+  "192.168.",
+  "[::1]",
+  "[::ffff:127.0.0.1]",
+];
+
+function hostBlocked(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (host === "localhost" || host === "[::1]") {
+    return true;
+  }
+  return BLOCKED_HOSTS.some(
+    (blocked) => blocked !== "localhost" && host.startsWith(blocked),
+  );
+}
+
+/** Test-only escape hatch: the loopback block exists so pasted URLs can never
+ *  reach cloud metadata or LAN hosts. Tests set HARMOS_ALLOW_LOOPBACK_FETCH=1
+ *  to exercise the HTTP path against a local stub. */
+function loopbackAllowed(): boolean {
+  return process.env.HARMOS_ALLOW_LOOPBACK_FETCH === "1";
+}
+
+export function pageMeta(html: string): {
+  title: string | null;
+  description: string | null;
+  text: string;
+} {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]{0,300}?)<\/title>/i);
+  const descMatch = html.match(
+    /<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]*content=["']([\s\S]{0,500}?)["']/i,
+  );
+  const altDescMatch = html.match(
+    /<meta[^>]+content=["']([\s\S]{0,500}?)["'][^>]*?(?:name|property)=["'](?:description|og:description)["']/i,
+  );
+
+  const withoutScripts = html
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript\s*>/gi, " ");
+  const text = withoutScripts
+    .replace(/<\/(p|div|h[1-6]|li|tr|br)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/\n\s*\n\s*\n+/g, "\n\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join("\n")
+    .trim();
+
+  return {
+    title: titleMatch?.[1]?.trim() || null,
+    description: (descMatch?.[1] ?? altDescMatch?.[1] ?? "").trim() || null,
+    text: text.length > EXTRACT_MAX_CHARS ? `${text.slice(0, EXTRACT_MAX_CHARS)}… [truncated]` : text,
+  };
+}
+
+export async function fetchPageText(
+  rawUrl: string,
+): Promise<{ url: string; title: string | null; text: string } | { error: string }> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl.trim());
+  } catch {
+    return { error: "That does not look like a URL." };
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return { error: "Only http(s) links can be fetched." };
+  }
+  if (!loopbackAllowed() && hostBlocked(url.hostname)) {
+    return { error: "Local and private addresses are off limits." };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url.toString(), {
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "user-agent": "HarmosCatalogBot/1.0 (+local catalog import)" },
+    });
+  } catch (error) {
+    return {
+      error: `Could not reach the page (${error instanceof Error ? error.message : "network error"}). Paste the datasheet text instead.`,
+    };
+  }
+
+  if (!response.ok) {
+    return { error: `The page answered HTTP ${response.status}. Paste the datasheet text instead.` };
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (
+    !/text\/html|application\/xhtml/i.test(contentType) &&
+    !/\.html?([?#]|$)/i.test(url.pathname)
+  ) {
+    return {
+      error: "Only web pages can be read directly (PDFs cannot) — paste the datasheet text instead.",
+    };
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { error: "Empty response. Paste the datasheet text instead." };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    received += value.length;
+    if (received > FETCH_MAX_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return { error: "Page too large to read. Paste the relevant text instead." };
+    }
+    chunks.push(value);
+  }
+
+  const total = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    total.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const html = new TextDecoder("utf-8", { fatal: false }).decode(total);
+  const meta = pageMeta(html);
+
+  if (!meta.text) {
+    return { error: "No readable text found. Paste the datasheet text instead." };
+  }
+
+  return { url: url.toString(), title: meta.title, text: meta.text };
+}

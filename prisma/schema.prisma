@@ -55,6 +55,21 @@ model CatalogPart {
   @@index([manufacturer])
 }
 
+/// An AI-drafted catalog entry waiting for human review. Nothing here is in
+/// the catalog yet: approving validates once more and creates the CatalogPart
+/// (origin "agent"); rejecting deletes the row.
+model CatalogProposal {
+  id           String   @id @default(cuid())
+  status       String   @default("pending")
+  source       String   @default("ai")
+  request      String
+  payloadJson  String
+  note         String   @default("")
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
 /// A deterministic constraint used to score catalog candidates. Values are
 /// JSON-encoded so a constraint can compare numbers or strings/arrays.
 model ComparisonConstraint {

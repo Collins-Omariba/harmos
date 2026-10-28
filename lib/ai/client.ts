@@ -202,7 +202,7 @@ export const LIVE_TEMPERATURE = 0.2;
 export const LIVE_MAX_TOKENS = 4000;
 export const LIVE_TIMEOUT_MS = 90_000;
 
-function buildSystemPrompt(outputSchema: z.ZodType): string {
+function buildSystemPrompt(outputSchema: z.ZodType, webSearch = false): string {
   let shape = "";
   try {
     shape = `\nIt must validate against this JSON schema:\n${JSON.stringify(z.toJSONSchema(outputSchema))}`;
@@ -214,6 +214,11 @@ function buildSystemPrompt(outputSchema: z.ZodType): string {
     "You are a JSON-only assistant for a hardware engineering workspace.",
     "Respond with a single JSON object and nothing else: no markdown fences, no commentary.",
     "Never invent specifications, part numbers, URLs, or ids that are not in the user message.",
+    ...(webSearch
+      ? [
+          "You may browse the live web to verify facts before answering; prefer manufacturer datasheets and product pages over memory.",
+        ]
+      : []),
     shape,
   ].join("\n");
 }
@@ -221,20 +226,31 @@ function buildSystemPrompt(outputSchema: z.ZodType): string {
 /**
  * The one and only AI entry point.
  *
- * Signature is fixed:
- *   runTask<T>(taskName, inputSchema, outputSchema, prompt)
+ * Signature: runTask<T>(taskName, inputSchema, outputSchema, prompt, opts?)
  *
  * Behavior:
  * 1. compute the cache key from taskName + prompt + inputSchema,
  * 2. return a valid disk cache hit before doing any work,
- * 3. request JSON validated by outputSchema (single attempt),
+ * 3. request JSON validated by outputSchema (single attempt, plus one repair
+ *    retry on invalid output, plus one no-search retry if the endpoint
+ *    rejects web-search options),
  * 4. write the cache and append one JSON line to logs/ai.log.
+ *
+ * Pass { webSearch: true } when the task benefits from live browsing. The
+ * model searches server-side; nothing is fetched client-side and no search
+ * API key exists anywhere in this codebase.
  */
+export type RunTaskOpts = {
+  /** Ask the model to browse the web while answering (server-side search). */
+  webSearch?: boolean;
+};
+
 export async function runTask<T>(
   taskName: string,
   inputSchema: z.ZodType,
   outputSchema: z.ZodType<T>,
   prompt: string,
+  opts?: RunTaskOpts,
 ): Promise<T> {
   const startedAt = Date.now();
   const config = getAiConfig();
@@ -288,18 +304,52 @@ export async function runTask<T>(
     );
   }
 
-  try {
+  return runLive(taskName, inputSchema, outputSchema, prompt, logBase, {
+    webSearch: opts?.webSearch ?? false,
+    startedAt,
+  });
+}
+
+type LogBase = Omit<AiLogEntry, "cacheHit" | "latencyMs" | "status"> & {
+  latencyMs: number;
+};
+
+async function runLive<T>(
+  taskName: string,
+  inputSchema: z.ZodType,
+  outputSchema: z.ZodType<T>,
+  prompt: string,
+  logBase: LogBase,
+  options: { webSearch: boolean; startedAt: number },
+): Promise<T> {
+  const config = getAiConfig();
+  const startedAt = options.startedAt;
+  const cacheKey = taskCacheKey(taskName, prompt, inputSchema);
+
+  async function attempt(
+    promptText: string,
+    withSearch: boolean,
+  ): Promise<{
+    data: T;
+    usage: AiUsage;
+  }> {
     const client = createOpenAIClient();
     const completion = await client.chat.completions.create(
       {
         model: config.model,
         messages: [
-          { role: "system", content: buildSystemPrompt(outputSchema) },
-          { role: "user", content: prompt },
+          {
+            role: "system",
+            content: buildSystemPrompt(outputSchema, withSearch),
+          },
+          { role: "user", content: promptText },
         ],
         temperature: LIVE_TEMPERATURE,
         max_tokens: LIVE_MAX_TOKENS,
         response_format: { type: "json_object" },
+        ...(withSearch
+          ? { web_search_options: { search_context_size: "medium" as const } }
+          : {}),
       },
       { timeout: LIVE_TIMEOUT_MS },
     );
@@ -321,22 +371,84 @@ export async function runTask<T>(
       );
     }
 
-    const usage: AiUsage = {
-      inputTokens: completion.usage?.prompt_tokens ?? 0,
-      outputTokens: completion.usage?.completion_tokens ?? 0,
-      totalTokens: completion.usage?.total_tokens ?? 0,
+    return {
+      data: validated.data,
+      usage: {
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+        totalTokens: completion.usage?.total_tokens ?? 0,
+      },
     };
+  }
 
-    await writeTaskCache(taskName, cacheKey, validated.data, usage);
+  async function logFailure(message: string): Promise<void> {
     await appendAiLog({
       ...logBase,
       cacheHit: false,
-      tokens: usage,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error: message,
+    });
+  }
+
+  function isUnsupportedSearchError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+    const status = (error as { status?: number }).status;
+    return (
+      status === 400 &&
+      /web_search|unknown.*(param|field)|unrecognized/i.test(error.message)
+    );
+  }
+
+  try {
+    let result: { data: T; usage: AiUsage };
+    let withSearch = options.webSearch;
+    let promptText = prompt;
+    for (let triesLeft = 2; triesLeft > 0; triesLeft -= 1) {
+      try {
+        result = await attempt(promptText, withSearch);
+        break;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "ai_request_failed";
+        // The endpoint may not understand web-search options: fall back to a
+        // plain call once and say so in the log, instead of failing the task.
+        if (withSearch && isUnsupportedSearchError(error)) {
+          await logFailure(
+            `web_search_unsupported:${taskName}: retrying without browsing`,
+          );
+          withSearch = false;
+          continue;
+        }
+        // One repair retry for malformed output only: show the model what was
+        // wrong and ask for corrected JSON. Transport errors never retry here.
+        if (
+          triesLeft > 1 &&
+          (message.startsWith("ai_invalid_json") ||
+            message.startsWith("ai_invalid_output"))
+        ) {
+          await logFailure(`${message} (retrying once with repair hint)`);
+          promptText = `${prompt}\n\nYour previous reply was not valid: ${message.slice(0, 300)}. Reply with ONLY the corrected JSON object.`;
+          continue;
+        }
+        throw error;
+      }
+    }
+    // TypeScript cannot see the loop always assigns; the throw above guards it.
+    const done = result!;
+
+    await writeTaskCache(taskName, cacheKey, done.data, done.usage);
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      tokens: done.usage,
       latencyMs: Date.now() - startedAt,
       status: "ok",
     });
 
-    return validated.data;
+    return done.data;
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "ai_request_failed";
@@ -344,13 +456,7 @@ export async function runTask<T>(
       message.startsWith("ai_invalid_json") ||
       message.startsWith("ai_invalid_output")
     ) {
-      await appendAiLog({
-        ...logBase,
-        cacheHit: false,
-        latencyMs: Date.now() - startedAt,
-        status: "error",
-        error: message,
-      });
+      await logFailure(message);
     } else {
       await appendAiLog({
         ...logBase,

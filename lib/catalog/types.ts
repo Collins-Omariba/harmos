@@ -129,7 +129,7 @@ export type CatalogSpecs = {
   priceUsd?: number;
 };
 
-export type CatalogOrigin = "seeded" | "imported" | "custom";
+export type CatalogOrigin = "seeded" | "imported" | "custom" | "agent";
 
 export type CatalogPart = {
   id: string;
