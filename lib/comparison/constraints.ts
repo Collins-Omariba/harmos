@@ -5,6 +5,11 @@ import type {
   ComparisonOperator,
   ConstraintValue,
 } from "@/lib/comparison/types";
+import {
+  COMPARISON_METRICS,
+  getMetricDef,
+  operatorsForMetric,
+} from "@/lib/comparison/metrics";
 
 type ConstraintRow = {
   id: string;
@@ -26,6 +31,41 @@ const OPERATORS: ComparisonOperator[] = [
   "includes",
   "covers",
 ];
+
+const VALID_OPERATORS = new Set<string>(OPERATORS);
+
+export function parseConstraintValue(
+  metric: string,
+  operator: string,
+  rawValue: string,
+): { value: number | string } | { error: string } {
+  const def = getMetricDef(metric);
+
+  if (!def) {
+    return {
+      error: `Unknown metric. Choose one of: ${COMPARISON_METRICS.map((m) => m.metric).join(", ")}.`,
+    };
+  }
+  if (!VALID_OPERATORS.has(operator)) {
+    return { error: "Unknown operator." };
+  }
+  if (
+    !(operatorsForMetric(metric) as string[]).includes(operator) &&
+    !(operator === "eq" && def.valueType === "string")
+  ) {
+    return { error: `Operator does not apply to ${def.label}.` };
+  }
+
+  if (def.valueType === "number") {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) {
+      return { error: `"${rawValue}" is not a number.` };
+    }
+    return { value };
+  }
+
+  return { value: rawValue };
+}
 
 export function decodeConstraintValue(raw: string): ConstraintValue {
   try {

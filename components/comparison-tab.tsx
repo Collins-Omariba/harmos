@@ -2,11 +2,11 @@ import { FlaskConical, Scale } from "lucide-react";
 
 import { ComparisonCandidate } from "@/components/comparison-candidate";
 import { ComparisonRunner } from "@/components/comparison-runner";
+import { ConstraintManager } from "@/components/constraint-manager";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
 import type { CatalogPart } from "@/lib/catalog/types";
 import { parseCandidatePayload } from "@/lib/comparison/constraints";
-import { formatExpected } from "@/lib/comparison/scorer";
 import type {
   CandidateStatus,
   ComparisonConstraint,
@@ -120,48 +120,9 @@ export function ComparisonTab({
             </p>
             <Scale className="size-3.5 text-accent" />
           </div>
-          {constraints.length > 0 ? (
-            <ul className="mt-4 divide-y divide-border border-y border-border">
-              {constraints.map((constraint) => (
-                <li
-                  key={constraint.id}
-                  className="flex items-start justify-between gap-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <p className="text-xs leading-snug text-foreground/90">
-                      {constraint.label}
-                    </p>
-                    <p className="numeric mt-0.5 text-[10px] text-muted-foreground">
-                      {constraint.metric}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <Badge
-                      variant="outline"
-                      className={
-                        constraint.kind === "mandatory"
-                          ? "border-primary/35 bg-primary/10 font-mono text-[9px] uppercase tracking-[0.1em] text-primary"
-                          : "border-accent/35 bg-accent/10 font-mono text-[9px] uppercase tracking-[0.1em] text-accent"
-                      }
-                    >
-                      {constraint.kind}
-                    </Badge>
-                    <p className="numeric mt-1 text-[10px] text-muted-foreground">
-                      {formatExpected(
-                        constraint.operator,
-                        constraint.value,
-                        constraint.unit,
-                      )}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              No comparison constraints are stored for this project yet.
-            </p>
-          )}
+          <div className="mt-4">
+            <ConstraintManager projectId={projectId} constraints={constraints} />
+          </div>
         </div>
 
         <div className="rounded-lg border border-border bg-card/70 p-5">

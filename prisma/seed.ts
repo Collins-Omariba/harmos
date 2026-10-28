@@ -21,27 +21,48 @@ const DEMO_CANDIDATES = [
 ];
 
 async function main() {
-  // This is demo data. Every part number and manufacturer below is fictional.
-  await prisma.project.deleteMany();
+  // Idempotent by design: the seed fills gaps but never deletes user data.
+  // Missing catalog rows are added (existing ids are left untouched); the
+  // demo project and its comparison run are created only when missing.
+  // Use `pnpm db:reset` for a destructive demo reset.
+  const existingIds = new Set(
+    (await prisma.catalogPart.findMany({ select: { id: true } })).map(
+      (row) => row.id,
+    ),
+  );
+  const missingParts = CATALOG_PARTS.filter(
+    (part) => !existingIds.has(part.id),
+  );
 
-  // The catalog is global and real; project data is fictional demo data.
-  await prisma.catalogPart.deleteMany();
-  await prisma.catalogPart.createMany({
-    data: CATALOG_PARTS.map((part) => ({
-      id: part.id,
-      partNumber: part.partNumber,
-      manufacturer: part.manufacturer,
-      category: part.category,
-      description: part.description,
-      package: part.package,
-      datasheetUrl: part.datasheetUrl,
-      sourceUrl: part.sourceUrl,
-      sourceRetrievedAt: new Date(part.sourceRetrievedAt),
-      priceUsd: part.priceUsd,
-      specsJson: JSON.stringify(part.specs),
-      tags: part.tags.join(", "),
-    })),
+  if (missingParts.length > 0) {
+    await prisma.catalogPart.createMany({
+      data: missingParts.map((part) => ({
+        id: part.id,
+        partNumber: part.partNumber,
+        manufacturer: part.manufacturer,
+        category: part.category,
+        description: part.description,
+        package: part.package,
+        datasheetUrl: part.datasheetUrl,
+        sourceUrl: part.sourceUrl,
+        sourceRetrievedAt: new Date(part.sourceRetrievedAt),
+        priceUsd: part.priceUsd,
+        specsJson: JSON.stringify(part.specs),
+        tags: part.tags.join(", "),
+      })),
+    });
+  }
+
+  const existing = await prisma.project.findUnique({
+    where: { id: PROJECT_ID },
   });
+
+  if (existing) {
+    console.log(
+      `Catalog up to date (${missingParts.length} new rows). Demo project already exists; leaving user data untouched.`,
+    );
+    return;
+  }
 
   const preset = getComparisonPreset(DEMO_CATEGORY);
 

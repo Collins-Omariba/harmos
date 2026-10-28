@@ -3,16 +3,18 @@ import { notFound } from "next/navigation";
 import {
   ArrowRight,
   FlaskConical,
-  GitBranch,
   Network,
   Search,
 } from "lucide-react";
 
-import { ArtifactRow } from "@/components/artifact-row";
+import { ArtifactManager } from "@/components/artifact-manager";
 import { ComparisonTab } from "@/components/comparison-tab";
-import { ComponentTable } from "@/components/component-table";
+import { ComponentManager } from "@/components/component-manager";
+import { DecisionManager } from "@/components/decision-manager";
 import { EmptyState } from "@/components/empty-state";
-import { RequirementCard } from "@/components/requirement-card";
+import { ProjectEditor } from "@/components/project-editor";
+import { RequirementManager } from "@/components/requirement-manager";
+import { ValidationManager } from "@/components/validation-manager";
 import { ProjectStatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -113,8 +115,18 @@ export default async function ProjectPage({
             </p>
           </div>
           <div className="numeric shrink-0 text-right text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-            <p>Seeded {formatDate(project.createdAt)}</p>
+            <p>Created {formatDate(project.createdAt)}</p>
             <p className="mt-1">Updated {formatDate(project.updatedAt)}</p>
+            <div className="mt-2">
+              <ProjectEditor
+                project={{
+                  id: project.id,
+                  name: project.name,
+                  brief: project.brief,
+                  status: project.status,
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -181,32 +193,12 @@ export default async function ProjectPage({
                   <SectionLabel>Validation</SectionLabel>
                   <FlaskConical className="size-3.5 text-accent" />
                 </div>
-                {project.validationTests.length > 0 ? (
-                  <div className="mt-4 space-y-4">
-                    {project.validationTests.map((test) => (
-                      <div key={test.id}>
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium text-foreground">
-                            {test.name}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className="shrink-0 border-accent/35 bg-accent/10 font-mono text-[10px] uppercase tracking-[0.12em] text-accent"
-                          >
-                            {test.status}
-                          </Badge>
-                        </div>
-                        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                          {test.notes}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    No validation tests recorded yet.
-                  </p>
-                )}
+                <div className="mt-4">
+                  <ValidationManager
+                    projectId={project.id}
+                    tests={project.validationTests}
+                  />
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -223,14 +215,11 @@ export default async function ProjectPage({
                 {padCount(counts.requirements)} cards
               </span>
             </div>
-            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              {project.requirements.map((requirement, index) => (
-                <RequirementCard
-                  key={requirement.id}
-                  requirement={requirement}
-                  index={index}
-                />
-              ))}
+            <div className="mt-3">
+              <RequirementManager
+                projectId={project.id}
+                requirements={project.requirements}
+              />
             </div>
           </div>
         </TabsContent>
@@ -244,10 +233,10 @@ export default async function ProjectPage({
               </h2>
             </div>
             <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-              {padCount(counts.components)} parts · fictional demo
+              {padCount(counts.components)} parts
             </span>
           </div>
-          <ComponentTable components={project.components} />
+          <ComponentManager projectId={project.id} components={project.components} />
         </TabsContent>
 
         <TabsContent value="artifacts" className="mt-6 space-y-8">
@@ -263,11 +252,7 @@ export default async function ProjectPage({
                 {padCount(counts.artifacts)} artifacts
               </span>
             </div>
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              {project.artifacts.map((artifact) => (
-                <ArtifactRow key={artifact.id} artifact={artifact} />
-              ))}
-            </div>
+            <ArtifactManager projectId={project.id} artifacts={project.artifacts} />
           </div>
 
           <div>
@@ -321,36 +306,7 @@ export default async function ProjectPage({
             </span>
           </div>
 
-          {project.decisions.length > 0 ? (
-            <div className="space-y-3">
-              {project.decisions.map((decision) => (
-                <Card
-                  key={decision.id}
-                  className="gap-0 rounded-l-none border border-l-2 border-border border-l-accent bg-card/70 py-0 shadow-none ring-0"
-                >
-                  <CardContent className="p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <h3 className="text-sm font-medium text-foreground">
-                        {decision.title}
-                      </h3>
-                      <span className="numeric shrink-0 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                        {formatDate(decision.decidedAt)}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                      {decision.rationale}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={GitBranch}
-              title="No decisions recorded"
-              description="Design decisions and their rationale will be logged here as the project evolves."
-            />
-          )}
+          <DecisionManager projectId={project.id} decisions={project.decisions} />
         </TabsContent>
 
         <TabsContent value="research" className="mt-6">

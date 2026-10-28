@@ -11,6 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
+    "db:reset": "HARMOS_ALLOW_RESET=1 tsx prisma/reset.ts",
+    "catalog:import": "tsx prisma/catalog-import.ts",
     "test": "node --import tsx --test $(find tests -name '*.test.ts' | sort)",
     "postinstall": "prisma generate"
   },

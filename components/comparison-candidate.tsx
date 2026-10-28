@@ -2,6 +2,7 @@ import { Check, ExternalLink, X } from "lucide-react";
 
 import { CandidateStatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
+import { isSourceStale, sourceAgeLabel } from "@/lib/catalog/staleness";
 import { catalogCategoryLabel } from "@/lib/catalog/types";
 import type { ComparisonCandidatePayload } from "@/lib/comparison/types";
 import { cn } from "@/lib/utils";
@@ -70,8 +71,13 @@ export function ComparisonCandidate({
               <ExternalLink className="size-3" />
             </a>
             <span className="numeric text-muted-foreground">
-              source {part.sourceRetrievedAt.slice(0, 10)}
+              {sourceAgeLabel(part.sourceRetrievedAt)}
             </span>
+            {isSourceStale(part.sourceRetrievedAt) ? (
+              <span className="numeric rounded-sm border border-accent/35 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                verify before designing
+              </span>
+            ) : null}
             {part.priceUsd !== null ? (
               <span className="numeric text-muted-foreground">
                 ${part.priceUsd.toFixed(2)} indicative
