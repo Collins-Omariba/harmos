@@ -5,12 +5,11 @@ import {
   Bookmark,
   BookmarkCheck,
   ExternalLink,
-  Globe,
   Plus,
   Sparkles,
 } from "lucide-react";
 
-import { createResourceAction, deleteResourceAction, fetchResourceDetails, importCatalogResourcesAction, runResourceSelectionAction, runWebSearchAction, setResourceSelectionAction, updateResourceAction } from "@/app/actions/research";
+import { createResourceAction, deleteResourceAction, fetchResourceDetails, importCatalogResourcesAction, runResourceSelectionAction, setResourceSelectionAction, updateResourceAction } from "@/app/actions/research";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,7 +112,7 @@ function AddResourceDialog({ projectId }: { projectId: string }) {
                   <TextInput
                     id="add-resource-url"
                     name="url"
-                    type="url"
+                    type="text" inputMode="url"
                     required
                     value={url}
                     onChange={(event) => setUrl(event.target.value)}
@@ -218,7 +217,7 @@ function ResourceFields({ resource }: { resource?: ResourceRow }) {
           <TextInput
             id={`${id}-url`}
             name="url"
-            type="url"
+            type="text" inputMode="url"
             required
             defaultValue={resource?.url ?? ""}
             placeholder="https://…"
@@ -410,22 +409,12 @@ export function ResearchManager({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, startSelecting] = useTransition();
-  const [query, setQuery] = useState("");
-  const [searching, startSearching] = useTransition();
   const selected = resources.filter((resource) => resource.selected);
 
   function runSelection() {
     setMessage(null);
     startSelecting(async () => {
       const result = await runResourceSelectionAction(projectId);
-      setMessage(result?.message ?? null);
-    });
-  }
-
-  function runSearch() {
-    setMessage(null);
-    startSearching(async () => {
-      const result = await runWebSearchAction(projectId, query);
       setMessage(result?.message ?? null);
     });
   }
@@ -508,26 +497,6 @@ export function ResearchManager({
               The index is the selection universe: every citation below links
               a stored source.
             </p>
-            <div className="mt-3 flex max-w-xl items-center gap-2">
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search the web for datasheets…"
-                aria-label="Web search query"
-                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={runSearch}
-                disabled={searching || query.trim().length < 3}
-                title="Search the web via the AI model"
-              >
-                <Globe data-icon="inline-start" />
-                {searching ? "Searching..." : "Web search"}
-              </Button>
-            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button

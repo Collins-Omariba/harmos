@@ -1,15 +1,30 @@
 /**
  * Minimal server-side page fetch for user-pasted links. No search provider,
- * no AI tokens: plain HTTP with strict caps, HTML-only extraction.
+ * no AI tokens: plain HTTP with strict caps, HTML extraction, and PDF to
+ * markdown conversion for datasheets.
  *
  * Security posture: this is a local single-user tool, but we still refuse
- * to fetch non-http(s) URLs, localhost/private hostnames, and oversized or
- * non-HTML responses, and everything caps at FETCH_MAX_BYTES.
+ * to fetch non-http(s) URLs, localhost/private hostnames, and oversized
+ * responses. HTML caps at FETCH_MAX_BYTES, PDFs at PDF_MAX_BYTES.
  */
+
+import { pdfBufferToMarkdown, PDF_MAX_BYTES } from "@/lib/pdf-to-markdown";
 
 export const FETCH_MAX_BYTES = 500_000;
 export const FETCH_TIMEOUT_MS = 15_000;
 export const EXTRACT_MAX_CHARS = 8_000;
+
+/**
+ * Users paste bare domains ("ti.com/lit/ds/…") as often as full URLs.
+ * Prefix a scheme when none is present so link boxes never punish that.
+ */
+export function normalizeUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    return trimmed;
+  }
+  return `https://${trimmed}`;
+}
 
 const BLOCKED_HOSTS = [
   "localhost",
@@ -78,12 +93,13 @@ export function pageMeta(html: string): {
   };
 }
 
+
 export async function fetchPageText(
   rawUrl: string,
 ): Promise<{ url: string; title: string | null; text: string } | { error: string }> {
   let url: URL;
   try {
-    url = new URL(rawUrl.trim());
+    url = new URL(normalizeUrl(rawUrl));
   } catch {
     return { error: "That does not look like a URL." };
   }
@@ -112,42 +128,75 @@ export async function fetchPageText(
   }
 
   const contentType = response.headers.get("content-type") ?? "";
+  const looksPdf =
+    /application\/pdf/i.test(contentType) ||
+    /\.pdf([?#]|$)/i.test(url.pathname);
+
+  async function download(maxBytes: number): Promise<Uint8Array | null> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return null;
+    }
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      received += value.length;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+    const total = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      total.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return total;
+  }
+
+  if (looksPdf) {
+    const data = await download(PDF_MAX_BYTES);
+    if (!data) {
+      return { error: "PDF too large to read (over 8 MB). Paste the relevant table instead." };
+    }
+    try {
+      const converted = await pdfBufferToMarkdown(data);
+      return {
+        url: url.toString(),
+        title: null,
+        text: converted.markdown,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unreadable";
+      if (reason === "pdf_no_text") {
+        return {
+          error: "That PDF has no selectable text (likely a scan). Paste the table text instead, or add the part manually.",
+        };
+      }
+      return { error: "Could not read that PDF. Paste the datasheet text instead." };
+    }
+  }
+
   if (
     !/text\/html|application\/xhtml/i.test(contentType) &&
     !/\.html?([?#]|$)/i.test(url.pathname)
   ) {
     return {
-      error: "Only web pages can be read directly (PDFs cannot) — paste the datasheet text instead.",
+      error: "Only web pages and PDFs can be read. Paste the datasheet text instead.",
     };
   }
 
-  const reader = response.body?.getReader();
-  if (!reader) {
+  const raw = await download(FETCH_MAX_BYTES);
+  if (!raw) {
     return { error: "Empty response. Paste the datasheet text instead." };
   }
-
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
-    }
-    received += value.length;
-    if (received > FETCH_MAX_BYTES) {
-      await reader.cancel().catch(() => undefined);
-      return { error: "Page too large to read. Paste the relevant text instead." };
-    }
-    chunks.push(value);
-  }
-
-  const total = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    total.set(chunk, offset);
-    offset += chunk.length;
-  }
-  const html = new TextDecoder("utf-8", { fatal: false }).decode(total);
+  const html = new TextDecoder("utf-8", { fatal: false }).decode(raw);
   const meta = pageMeta(html);
 
   if (!meta.text) {

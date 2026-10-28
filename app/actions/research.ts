@@ -6,7 +6,7 @@ import { z } from "zod";
 import { selectResources } from "@/lib/ai/tasks/select_resources";
 import { findSources } from "@/lib/ai/tasks/find_sources";
 import { selectTopResources } from "@/lib/research/heuristic";
-import { fetchPageText } from "@/lib/fetch-page";
+import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
 import { catalog } from "@/lib/catalog";
 import { RESOURCE_KINDS } from "@/lib/research";
 import { prisma } from "@/lib/db";
@@ -42,7 +42,7 @@ export async function createResourceAction(
   const parsed = resourceSchema.safeParse({
     projectId: formData.get("projectId"),
     title: formData.get("title"),
-    url: formData.get("url"),
+    url: normalizeUrl(String(formData.get("url") ?? "")),
     kind: formData.get("kind"),
     summary: formData.get("summary"),
     tags: formData.get("tags") ?? "",
@@ -81,7 +81,7 @@ export async function updateResourceAction(
   const parsed = resourceSchema.safeParse({
     projectId: formData.get("projectId"),
     title: formData.get("title"),
-    url: formData.get("url"),
+    url: normalizeUrl(String(formData.get("url") ?? "")),
     kind: formData.get("kind"),
     summary: formData.get("summary"),
     tags: formData.get("tags") ?? "",

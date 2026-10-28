@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { suggestCatalogParts } from "@/lib/ai/tasks/suggest_catalog_parts";
 import { validateProposalCandidate } from "@/lib/catalog/proposals";
-import { fetchPageText } from "@/lib/fetch-page";
+import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
 import { splitTags, validateSpecsObject } from "@/lib/catalog/specs";
 import {
   CATALOG_CATEGORY_KEYS,
@@ -37,8 +37,16 @@ const catalogSchema = z.object({
     .trim()
     .min(10, "Description needs a sentence or two."),
   package: z.string().trim().min(1, "Package is required."),
-  datasheetUrl: z.string().trim().url("Datasheet must be a URL."),
-  sourceUrl: z.string().trim().url("Source must be a URL."),
+  datasheetUrl: z
+    .string()
+    .trim()
+    .transform((value) => normalizeUrl(value))
+    .pipe(z.string().url("Datasheet must be a URL.")),
+  sourceUrl: z
+    .string()
+    .trim()
+    .transform((value) => normalizeUrl(value))
+    .pipe(z.string().url("Source must be a URL.")),
   sourceRetrievedAt: z.string().min(1, "Retrieval date is required."),
   priceUsd: z.string().trim(),
   tags: z.string().trim(),

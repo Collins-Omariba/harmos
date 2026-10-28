@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
 
-import { fetchPageText, pageMeta } from "@/lib/fetch-page";
+import { buildMinimalPdf } from "@/tests/pdf-fixture";
+import { fetchPageText, normalizeUrl, pageMeta } from "@/lib/fetch-page";
 
 function startStub(
-  respond: (url: string) => { status: number; contentType: string; body: string },
+  respond: (url: string) => { status: number; contentType: string; body: string | Uint8Array },
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
     const server = createServer((req, res) => {
@@ -68,24 +69,32 @@ test("fetchPageText reads HTML pages through the stub", async () => {
   }
 });
 
-test("non-HTML responses fail with guidance", async () => {
+test("PDF links convert to markdown instead of failing", async () => {
   const previous = process.env.HARMOS_ALLOW_LOOPBACK_FETCH;
   process.env.HARMOS_ALLOW_LOOPBACK_FETCH = "1";
-  const { server, port } = await startStub(() => ({
-    status: 200,
-    contentType: "application/pdf",
-    body: "%PDF-1.4 fake",
-  }));
+  const pdf = buildMinimalPdf([
+    "TPS7A14 Low-Dropout Regulator",
+    "Quiescent current 25 nA typical.",
+  ]);
+  const { server, port } = await startStub((url) => {
+    if (url.endsWith(".pdf")) {
+      return { status: 200, contentType: "application/pdf", body: pdf };
+    }
+    return { status: 200, contentType: "application/octet-stream", body: "binary-blob" };
+  });
 
   try {
-    const pdf = await fetchPageText(`http://127.0.0.1:${port}/ds.pdf`);
-    assert.ok("error" in pdf);
-    if ("error" in pdf) {
-      assert.match(pdf.error, /PDF/);
+    const converted = await fetchPageText(`http://127.0.0.1:${port}/tps7a14.pdf`);
+    assert.ok(!("error" in converted), JSON.stringify(converted).slice(0, 200));
+    if (!("error" in converted)) {
+      assert.ok(converted.text.includes("25 nA"));
     }
 
     const bad = await fetchPageText("not a url");
     assert.ok("error" in bad);
+
+    const blob = await fetchPageText(`http://127.0.0.1:${port}/file.bin`);
+    assert.ok("error" in blob);
   } finally {
     if (previous === undefined) {
       delete process.env.HARMOS_ALLOW_LOOPBACK_FETCH;
@@ -94,6 +103,13 @@ test("non-HTML responses fail with guidance", async () => {
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+});
+
+test("bare domains gain an https scheme", () => {
+  assert.equal(normalizeUrl("ti.com/lit/ds/symlink/tps7a02.pdf"), "https://ti.com/lit/ds/symlink/tps7a02.pdf");
+  assert.equal(normalizeUrl("  example.com/x  "), "https://example.com/x");
+  assert.equal(normalizeUrl("http://example.com/x"), "http://example.com/x");
+  assert.equal(normalizeUrl("https://example.com/x"), "https://example.com/x");
 });
 
 test("local and private addresses are off limits by default", async () => {

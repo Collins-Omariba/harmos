@@ -57,13 +57,14 @@ function ProposeForm() {
           <TextInput
             id="proposal-url"
             name="sourceUrl"
-            type="url"
+            type="text" inputMode="url"
             placeholder="https://www.ti.com/lit/ds/symlink/…"
           />
         </Field>
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Paste the product page and the AI drafts from the real specs instead
-          of memory. PDFs cannot be read from a link — paste their text below.
+          Paste the product page or datasheet PDF link and the AI drafts from
+          the real specs instead of memory. Scanned PDFs have no readable text
+          — paste their key table below in that case.
         </p>
       </div>
       <Field label="What should the catalog grow with?" htmlFor="proposal-request">
@@ -75,7 +76,7 @@ function ProposeForm() {
           placeholder='Low-power LDOs under $1 in SOT-23 — or paste a datasheet excerpt below and say "extract this part"'
         />
       </Field>
-      <Field label="Pasted reference text (optional — for PDFs)" htmlFor="proposal-pasted">
+      <Field label="Pasted reference text (optional — for scanned PDFs)" htmlFor="proposal-pasted">
         <TextArea
           id="proposal-pasted"
           name="pastedText"
