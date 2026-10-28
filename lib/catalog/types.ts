@@ -129,6 +129,8 @@ export type CatalogSpecs = {
   priceUsd?: number;
 };
 
+export type CatalogOrigin = "seeded" | "imported" | "custom";
+
 export type CatalogPart = {
   id: string;
   partNumber: string;
@@ -140,11 +142,12 @@ export type CatalogPart = {
   sourceUrl: string;
   sourceRetrievedAt: string;
   priceUsd: number | null;
+  origin: CatalogOrigin;
   tags: string[];
   specs: CatalogSpecs;
 };
 
-export type CatalogPartSeed = CatalogPart;
+export type CatalogPartSeed = Omit<CatalogPart, "origin">;
 
 export type CatalogFilter = {
   category?: string;

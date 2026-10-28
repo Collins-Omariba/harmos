@@ -7,7 +7,7 @@ import { Menu } from "lucide-react";
 import { AssistantPanel } from "@/components/assistant-panel";
 import { GlobalSearch } from "@/components/global-search";
 import { NewProjectButton } from "@/components/new-project-button";
-import { ProjectNavList } from "@/components/project-nav";
+import { ProjectNavList, LibraryNav } from "@/components/project-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ function MobileNav({ projects }: { projects: ProjectNavItem[] }) {
             projects={projects}
             onNavigate={() => setOpen(false)}
           />
+          <LibraryNav onNavigate={() => setOpen(false)} />
         </div>
         <div className="border-t border-border p-3">
           <NewProjectButton className="w-full" />
@@ -74,6 +75,7 @@ function Sidebar({ projects }: { projects: ProjectNavItem[] }) {
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <ProjectNavList projects={projects} />
+        <LibraryNav />
       </ScrollArea>
       <div className="shrink-0 border-t border-border p-3">
         <NewProjectButton className="w-full" />

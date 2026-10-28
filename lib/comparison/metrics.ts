@@ -54,6 +54,7 @@ export const COMPARISON_METRICS: MetricDef[] = [
   { metric: "sampleRateSps", label: "Sample rate", valueType: "number", units: ["SPS"] },
   { metric: "flashKb", label: "Flash size", valueType: "number", units: ["KB"] },
   { metric: "ramKb", label: "RAM size", valueType: "number", units: ["KB"] },
+  { metric: "cpu", label: "CPU core", valueType: "string", units: [] },
   { metric: "priceUsd", label: "Indicative price", valueType: "number", units: ["USD"] },
   { metric: "interfaces", label: "Interfaces (list)", valueType: "string", units: [] },
   { metric: "wireless", label: "Wireless (list)", valueType: "string", units: [] },

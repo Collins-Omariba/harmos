@@ -47,6 +47,10 @@ model CatalogPart {
   specsJson         String
   tags              String
 
+  /// Where the row came from: seeded (ship list), imported (CSV), or custom
+  /// (added in the UI). The seed only fills gaps and never overwrites rows.
+  origin String @default("seeded")
+
   @@index([category])
   @@index([manufacturer])
 }

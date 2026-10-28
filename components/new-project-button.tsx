@@ -109,9 +109,15 @@ export function NewProjectButton({ className }: { className?: string }) {
     });
   }
 
-  const canSuggest = brief.trim().length >= 10 && !suggesting;
-  const canCreate =
-    name.trim().length >= 2 && brief.trim().length >= 20 && !creating;
+  const nameOk = name.trim().length >= 2;
+  const briefLen = brief.trim().length;
+  const briefOk = briefLen >= 20;
+  const canSuggest = briefLen >= 10 && !suggesting;
+  const canCreate = nameOk && briefOk && !creating;
+  const blockers = [
+    !nameOk ? "a name (2+ characters)" : null,
+    !briefOk ? `a longer brief (${Math.max(0, 20 - briefLen)} more characters)` : null,
+  ].filter(Boolean);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -149,17 +155,30 @@ export function NewProjectButton({ className }: { className?: string }) {
               placeholder="Greenhouse water monitor"
               maxLength={80}
               autoComplete="off"
+              aria-invalid={!nameOk}
               className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             />
+            {!nameOk && name.length > 0 ? (
+              <p className="text-[11px] text-destructive">
+                Name needs at least 2 characters.
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
-            <label
-              htmlFor="new-project-brief"
-              className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
-            >
-              Brief
-            </label>
+            <div className="flex items-baseline justify-between">
+              <label
+                htmlFor="new-project-brief"
+                className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+              >
+                Brief
+              </label>
+              <span
+                className={`numeric text-[10px] ${briefOk ? "text-muted-foreground" : "text-destructive"}`}
+              >
+                {briefLen}/20 minimum
+              </span>
+            </div>
             <textarea
               id="new-project-brief"
               value={brief}
@@ -167,8 +186,15 @@ export function NewProjectButton({ className }: { className?: string }) {
               placeholder="Battery-powered tank monitor, outdoor, reports over Wi-Fi every 15 minutes..."
               rows={3}
               maxLength={2000}
+              aria-invalid={!briefOk && brief.length > 0}
               className="min-h-20 w-full rounded-md border border-input bg-background px-2.5 py-2 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             />
+            {!briefOk && brief.length > 0 ? (
+              <p className="text-[11px] text-destructive">
+                {20 - briefLen} more character{20 - briefLen === 1 ? "" : "s"}{" "}
+                needed — the brief seeds requirements and suggestions.
+              </p>
+            ) : null}
           </div>
 
           {PACK_DIMENSIONS.map((dimension) => (
@@ -292,8 +318,23 @@ export function NewProjectButton({ className }: { className?: string }) {
             {packs.size} pack{packs.size === 1 ? "" : "s"} ·{" "}
             {checked.size} extra{checked.size === 1 ? "" : "s"} — the first
             comparison auto-runs in the best-scoring category.
+            {blockers.length > 0 && !creating ? (
+              <>
+                <br />
+                Needs {blockers.join(" and ")} to create.
+              </>
+            ) : null}
           </p>
-          <Button type="button" onClick={create} disabled={!canCreate}>
+          <Button
+            type="button"
+            onClick={create}
+            disabled={!canCreate}
+            title={
+              blockers.length > 0
+                ? `Needs ${blockers.join(" and ")}`
+                : "Create project"
+            }
+          >
             {creating ? "Creating..." : "Create project"}
           </Button>
         </DialogFooter>

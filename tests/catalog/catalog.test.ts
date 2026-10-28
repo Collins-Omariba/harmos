@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CATALOG_PARTS } from "@/lib/catalog/data";
+import { validateSpecsObject } from "@/lib/catalog/specs";
 import {
   CATALOG_CATEGORIES,
   isCatalogCategory,
@@ -41,6 +42,13 @@ test("every catalog part has a manufacturer source, datasheet, and specs", () =>
   }
 });
 
+test("every seeded specs object passes user-side validation", () => {
+  for (const part of CATALOG_PARTS) {
+    const result = validateSpecsObject(part.specs);
+    assert.ok(!("error" in result), `${part.partNumber}: ${(result as { error?: string }).error}`);
+  }
+});
+
 test("every catalog category has parts and a comparison preset", () => {
   for (const category of CATALOG_CATEGORIES) {
     const parts = CATALOG_PARTS.filter(
@@ -63,7 +71,7 @@ test("the seeded presets score every catalog part deterministically", () => {
   for (const preset of COMPARISON_PRESETS) {
     const parts = CATALOG_PARTS.filter(
       (part) => part.category === preset.key,
-    );
+    ).map((part) => ({ ...part, origin: "seeded" as const }));
     const constraints = preset.constraints.map((constraint, index) => ({
       ...constraint,
       id: `${preset.key}-${index}`,

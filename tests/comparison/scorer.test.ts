@@ -18,6 +18,7 @@ function part(overrides: Partial<CatalogPart> = {}): CatalogPart {
     sourceUrl: "https://example.com/product",
     sourceRetrievedAt: "2026-10-20",
     priceUsd: 10,
+    origin: "seeded",
     tags: ["test"],
     specs: {
       supplyMinV: 3.0,

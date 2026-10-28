@@ -55,6 +55,7 @@ async function main() {
       priceUsd: part.priceUsd,
       specsJson: JSON.stringify(part.specs),
       tags: part.tags.join(", "),
+      origin: "imported",
     };
 
     if (existing) {

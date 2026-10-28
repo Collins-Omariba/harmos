@@ -19,6 +19,7 @@ type CatalogPartRow = {
   sourceUrl: string;
   sourceRetrievedAt: Date;
   priceUsd: number | null;
+  origin: string;
   specsJson: string;
   tags: string;
 };
@@ -48,6 +49,10 @@ function toDomain(row: CatalogPartRow): CatalogPart {
     sourceUrl: row.sourceUrl,
     sourceRetrievedAt: row.sourceRetrievedAt.toISOString(),
     priceUsd: row.priceUsd,
+    origin:
+      row.origin === "imported" || row.origin === "custom"
+        ? row.origin
+        : "seeded",
     tags: row.tags
       .split(",")
       .map((tag) => tag.trim())
