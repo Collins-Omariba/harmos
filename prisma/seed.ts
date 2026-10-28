@@ -1,12 +1,66 @@
 import { PrismaClient } from "@prisma/client";
 
+import { CATALOG_PARTS } from "../lib/catalog/data";
+import {
+  constraintsFromPreset,
+  getComparisonPreset,
+} from "../lib/comparison/presets";
+import { runComparison } from "../lib/comparison/run";
+
 const prisma = new PrismaClient();
 
 const PROJECT_ID = "proj-water-tank-monitor";
+const DEMO_CATEGORY = "level-sensor";
+const DEMO_CANDIDATES = [
+  "cat-maxbotix-mb7040",
+  "cat-dfrobot-sen0311",
+  "cat-maxbotix-mb7389",
+  "cat-st-vl53l1x",
+  "cat-dfrobot-sen0204",
+  "cat-milone-etape",
+];
 
 async function main() {
   // This is demo data. Every part number and manufacturer below is fictional.
   await prisma.project.deleteMany();
+
+  // The catalog is global and real; project data is fictional demo data.
+  await prisma.catalogPart.deleteMany();
+  await prisma.catalogPart.createMany({
+    data: CATALOG_PARTS.map((part) => ({
+      id: part.id,
+      partNumber: part.partNumber,
+      manufacturer: part.manufacturer,
+      category: part.category,
+      description: part.description,
+      package: part.package,
+      datasheetUrl: part.datasheetUrl,
+      sourceUrl: part.sourceUrl,
+      sourceRetrievedAt: new Date(part.sourceRetrievedAt),
+      priceUsd: part.priceUsd,
+      specsJson: JSON.stringify(part.specs),
+      tags: part.tags.join(", "),
+    })),
+  });
+
+  const preset = getComparisonPreset(DEMO_CATEGORY);
+
+  if (!preset) {
+    throw new Error(`Missing comparison preset: ${DEMO_CATEGORY}`);
+  }
+
+  const constraints = constraintsFromPreset(preset, PROJECT_ID).map(
+    (constraint) => ({
+      id: constraint.id,
+      label: constraint.label,
+      metric: constraint.metric,
+      operator: constraint.operator,
+      valueJson: JSON.stringify(constraint.value),
+      unit: constraint.unit,
+      kind: constraint.kind,
+      position: constraint.position,
+    }),
+  );
 
   await prisma.project.create({
     data: {
@@ -56,6 +110,9 @@ async function main() {
             status: "needs_clarification",
           },
         ],
+      },
+      comparisonConstraints: {
+        create: constraints,
       },
       components: {
         create: [
@@ -182,7 +239,21 @@ async function main() {
     },
   });
 
-  console.log("Seeded demo project: Water Tank Monitor");
+  const comparison = await runComparison(
+    {
+      projectId: PROJECT_ID,
+      category: DEMO_CATEGORY,
+      catalogPartIds: DEMO_CANDIDATES,
+    },
+    { useAi: false },
+  );
+
+  console.log(
+    `Seeded ${CATALOG_PARTS.length} catalog parts and demo project: Water Tank Monitor`,
+  );
+  console.log(
+    `Seeded comparison run ${comparison.runId} with ${comparison.scores.length} scored candidates.`,
+  );
 }
 
 main()

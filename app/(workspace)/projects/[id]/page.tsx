@@ -5,11 +5,11 @@ import {
   FlaskConical,
   GitBranch,
   Network,
-  Scale,
   Search,
 } from "lucide-react";
 
 import { ArtifactRow } from "@/components/artifact-row";
+import { ComparisonTab } from "@/components/comparison-tab";
 import { ComponentTable } from "@/components/component-table";
 import { EmptyState } from "@/components/empty-state";
 import { RequirementCard } from "@/components/requirement-card";
@@ -17,6 +17,9 @@ import { ProjectStatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CATALOG_CATEGORIES } from "@/lib/catalog/types";
+import { catalog } from "@/lib/catalog";
+import { toDomainConstraint } from "@/lib/comparison/constraints";
 import { prisma } from "@/lib/db";
 import { formatDate, padCount } from "@/lib/format";
 
@@ -24,10 +27,13 @@ export const dynamic = "force-dynamic";
 
 export default async function ProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
+  const { tab } = await searchParams;
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -38,12 +44,20 @@ export default async function ProjectPage({
       edges: { orderBy: { id: "asc" } },
       decisions: { orderBy: { decidedAt: "desc" } },
       validationTests: { orderBy: { name: "asc" } },
+      comparisonConstraints: { orderBy: { position: "asc" } },
+      comparisonRuns: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: { candidates: { orderBy: { score: "desc" } } },
+      },
     },
   });
 
   if (!project) {
     notFound();
   }
+
+  const catalogParts = await catalog.listParts();
 
   const artifactNames = new Map(
     project.artifacts.map((artifact) => [artifact.id, artifact.name]),
@@ -55,6 +69,22 @@ export default async function ProjectPage({
     edges: project.edges.length,
     decisions: project.decisions.length,
   };
+  const comparisonConstraints = project.comparisonConstraints.map(
+    toDomainConstraint,
+  );
+  const latestComparison = project.comparisonRuns[0] ?? null;
+  const comparisonCandidateCount = latestComparison?.candidates.length ?? 0;
+  const tabValues = [
+    "overview",
+    "components",
+    "artifacts",
+    "decisions",
+    "research",
+    "comparison",
+    "graph",
+  ];
+  const defaultTab =
+    tab && tabValues.includes(tab) ? tab : "overview";
 
   return (
     <div className="mx-auto w-full max-w-6xl px-5 py-8 md:px-8 lg:py-10">
@@ -97,7 +127,7 @@ export default async function ProjectPage({
         </dl>
       </header>
 
-      <Tabs defaultValue="overview" className="mt-7">
+      <Tabs defaultValue={defaultTab} className="mt-7">
         <TabsList
           variant="line"
           className="w-full justify-start overflow-x-auto border-b border-border pb-1"
@@ -122,6 +152,7 @@ export default async function ProjectPage({
           </TabsTrigger>
           <TabsTrigger value="comparison" className="flex-none px-3">
             Comparison
+            <Count value={comparisonCandidateCount} />
           </TabsTrigger>
           <TabsTrigger value="graph" className="flex-none px-3">
             Graph
@@ -331,10 +362,16 @@ export default async function ProjectPage({
         </TabsContent>
 
         <TabsContent value="comparison" className="mt-6">
-          <EmptyState
-            icon={Scale}
-            title="Comparison engine not built yet"
-            description="M2 will score candidates against hard constraints in code, then use explain_comparison() only for trade-off prose and per-candidate verdicts."
+          <ComparisonTab
+            projectId={project.id}
+            constraints={comparisonConstraints}
+            run={latestComparison}
+            catalogParts={catalogParts}
+            categories={CATALOG_CATEGORIES.map((category) => ({
+              key: category.key,
+              label: category.label,
+              description: category.description,
+            }))}
           />
         </TabsContent>
 

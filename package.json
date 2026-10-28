@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx prisma/seed.ts",
+    "test": "node --import tsx --test $(find tests -name '*.test.ts' | sort)",
     "postinstall": "prisma generate"
   },
   "dependencies": {

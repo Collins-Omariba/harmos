@@ -1,5 +1,6 @@
 // Harmos data model
-// SQLite via Prisma. Every record except Project belongs to a Project.
+// SQLite via Prisma. Every record except Project and CatalogPart belongs to a
+// Project.
 
 generator client {
   provider = "prisma-client-js"
@@ -18,14 +19,71 @@ model Project {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  requirements         Requirement[]
-  resources            Resource[]
-  components           Component[]
-  comparisonCandidates ComparisonCandidate[]
-  artifacts            Artifact[]
-  edges                Edge[]
-  decisions            Decision[]
-  validationTests      ValidationTest[]
+  requirements          Requirement[]
+  resources             Resource[]
+  components            Component[]
+  comparisonConstraints ComparisonConstraint[]
+  comparisonRuns        ComparisonRun[]
+  comparisonCandidates  ComparisonCandidate[]
+  artifacts             Artifact[]
+  edges                 Edge[]
+  decisions             Decision[]
+  validationTests       ValidationTest[]
+}
+
+/// A global, locally seeded component catalog. Unlike project data, catalog
+/// rows are not owned by a project and are replaced by the seed.
+model CatalogPart {
+  id                String   @id
+  partNumber        String   @unique
+  manufacturer      String
+  category          String
+  description       String
+  package           String
+  datasheetUrl      String
+  sourceUrl         String
+  sourceRetrievedAt DateTime
+  priceUsd          Float?
+  specsJson         String
+  tags              String
+
+  @@index([category])
+  @@index([manufacturer])
+}
+
+/// A deterministic constraint used to score catalog candidates. Values are
+/// JSON-encoded so a constraint can compare numbers or strings/arrays.
+model ComparisonConstraint {
+  id        String  @id @default(cuid())
+  projectId String
+  label     String
+  metric    String
+  operator  String
+  valueJson String
+  unit      String?
+  kind      String
+  position  Int     @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// One scored comparison. A run snapshots the constraints and the AI prose so
+/// previous results remain reproducible after a project changes.
+model ComparisonRun {
+  id                String   @id @default(cuid())
+  projectId         String
+  category          String
+  summary           String
+  explanationStatus String
+  constraintsJson   String
+  createdAt         DateTime @default(now())
+
+  project    Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  candidates ComparisonCandidate[]
+
+  @@index([projectId])
 }
 
 model Requirement {
@@ -70,17 +128,23 @@ model Component {
 }
 
 model ComparisonCandidate {
-  id           String @id @default(cuid())
-  projectId    String
-  partNumber   String
-  manufacturer String
-  dataJson     String
-  verdict      String
-  reason       String
+  id                    String  @id @default(cuid())
+  projectId             String
+  runId                 String?
+  catalogPartId         String?
+  partNumber            String
+  manufacturer          String
+  dataJson              String
+  verdict               String
+  reason                String
+  score                 Int     @default(0)
+  constraintResultsJson String  @default("[]")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run     ComparisonRun? @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([runId])
 }
 
 model Artifact {
@@ -92,9 +156,9 @@ model Artifact {
   hash      String
   metaJson  String
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  edgesFrom Edge[] @relation("EdgeFrom")
-  edgesTo   Edge[] @relation("EdgeTo")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  edgesFrom Edge[]  @relation("EdgeFrom")
+  edgesTo   Edge[]  @relation("EdgeTo")
 
   @@index([projectId])
 }
@@ -128,7 +192,7 @@ model Decision {
 }
 
 model ValidationTest {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   projectId String
   name      String
   status    String

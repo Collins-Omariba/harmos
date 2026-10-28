@@ -1,4 +1,10 @@
-import { CircleAlert, CircleCheck, CircleHelp, CircleDot } from "lucide-react";
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleHelp,
+  CircleDot,
+  CircleX,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -83,6 +89,30 @@ export function RequirementStatusBadge({ status }: { status: string }) {
     >
       <Icon className="size-3" />
       {status.replaceAll("_", " ")}
+    </Badge>
+  );
+}
+
+const candidateStyles: Record<string, string> = {
+  pass: "border-primary/35 bg-primary/10 text-primary",
+  review: "border-accent/35 bg-accent/10 text-accent",
+  fail: "border-destructive/35 bg-destructive/10 text-destructive",
+};
+
+export function CandidateStatusBadge({ status }: { status: string }) {
+  const Icon =
+    status === "pass" ? CircleCheck : status === "review" ? CircleAlert : CircleX;
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "gap-1 font-mono text-[10px] uppercase tracking-[0.12em]",
+        candidateStyles[status] ?? "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      <Icon className="size-3" />
+      {status}
     </Badge>
   );
 }
