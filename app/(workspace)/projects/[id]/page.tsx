@@ -4,7 +4,6 @@ import {
   ArrowRight,
   FlaskConical,
   Network,
-  Search,
 } from "lucide-react";
 
 import { deleteProjectAction } from "@/app/actions/records";
@@ -15,6 +14,7 @@ import { DecisionManager } from "@/components/decision-manager";
 import { EmptyState } from "@/components/empty-state";
 import { ProjectEditor } from "@/components/project-editor";
 import { RequirementManager } from "@/components/requirement-manager";
+import { ResearchManager } from "@/components/research-manager";
 import { ValidationManager } from "@/components/validation-manager";
 import { ProjectStatusBadge } from "@/components/status-badges";
 import { DeleteButton } from "@/components/record-dialog";
@@ -49,6 +49,7 @@ export default async function ProjectPage({
       decisions: { orderBy: { decidedAt: "desc" } },
       validationTests: { orderBy: { name: "asc" } },
       comparisonConstraints: { orderBy: { position: "asc" } },
+      resources: { orderBy: { title: "asc" } },
       comparisonRuns: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -319,10 +320,10 @@ export default async function ProjectPage({
         </TabsContent>
 
         <TabsContent value="research" className="mt-6">
-          <EmptyState
-            icon={Search}
-            title="Research index not built yet"
-            description="M3 will index sources, retrieve datasheets, and let select_resources() pick from a pre-indexed local list. No live web search."
+          <ResearchManager
+            projectId={project.id}
+            resources={project.resources}
+            catalogParts={catalogParts}
           />
         </TabsContent>
 

@@ -115,6 +115,10 @@ model Resource {
   retrievedAt DateTime
   tags        String
 
+  /// Whether the latest selection (AI or manual) includes this row, and why.
+  selected      Boolean @default(false)
+  selectionNote String  @default("")
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])

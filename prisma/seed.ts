@@ -270,6 +270,47 @@ async function main() {
     { useAi: false },
   );
 
+  // Resource index derived from catalog rows relevant to the demo. Guarded
+  // like everything else in this seed: only fills an empty index.
+  const resourceCount = await prisma.resource.count({
+    where: { projectId: PROJECT_ID },
+  });
+
+  if (resourceCount === 0) {
+    const indexPartIds = [
+      ...DEMO_CANDIDATES,
+      "cat-espressif-esp32-wroom-32e",
+      "cat-ti-tps7a02",
+      "cat-ti-bq25100",
+      "cat-adi-max17048",
+      "cat-samsung-inr18650-35e",
+      "cat-adafruit-2011",
+    ];
+    const indexParts = await prisma.catalogPart.findMany({
+      where: { id: { in: indexPartIds } },
+    });
+
+    for (const part of indexParts) {
+      const tags = [part.category, ...part.tags.split(",").map((t) => t.trim()).filter(Boolean)].join(", ");
+      for (const entry of [
+        { title: `${part.partNumber} datasheet`, url: part.datasheetUrl, kind: "datasheet" },
+        { title: `${part.partNumber} manufacturer page`, url: part.sourceUrl, kind: "reference" },
+      ]) {
+        await prisma.resource.create({
+          data: {
+            projectId: PROJECT_ID,
+            title: entry.title,
+            url: entry.url,
+            kind: entry.kind,
+            summary: part.description,
+            retrievedAt: part.sourceRetrievedAt,
+            tags,
+          },
+        });
+      }
+    }
+  }
+
   console.log(
     `Seeded ${CATALOG_PARTS.length} catalog parts and demo project: Water Tank Monitor`,
   );
