@@ -11,6 +11,7 @@ import {
   KNOWN_CATEGORY_COUNT,
 } from "@/lib/comparison/constraints";
 import type { ComparisonOperator } from "@/lib/comparison/types";
+import { firmwareMetaSchema } from "@/lib/firmware/meta";
 import { prisma } from "@/lib/db";
 
 export type RecordActionState = {
@@ -466,23 +467,89 @@ const artifactSchema = z.object({
   kind: z.enum(ARTIFACT_KINDS),
   name: z.string().trim().min(2, "Name must be at least 2 characters."),
   version: z.string().trim().min(1, "Version is required."),
-  hash: z.string().trim().min(4, "Hash is too short to identify a version."),
-  metaJson: z
-    .string()
-    .trim()
-    .min(1, "Metadata is required.")
-    .refine(
-      (value) => {
-        try {
-          JSON.parse(value);
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { message: "Metadata must be valid JSON." },
-    ),
+  metaJson: z.string().trim().min(1, "Metadata is required."),
+  fw_target: z.string().trim().optional(),
+  fw_profile: z.string().trim().optional(),
+  fw_size: z.string().trim().optional(),
+  fw_checksum: z.string().trim().optional(),
+  fw_hw_name: z.string().trim().optional(),
+  fw_hw_version: z.string().trim().optional(),
 });
+
+type ParsedArtifactMeta =
+  | { metaJson: string }
+  | { error: string };
+
+/**
+ * Firmware gets validated, structured metadata; every other kind keeps its
+ * free-form JSON. When a hardware target is named, it must resolve to a real
+ * artifact revision in the same project — that is the compatibility rule.
+ */
+async function parseArtifactMeta(
+  projectId: string,
+  kind: string,
+  rawMetaJson: string,
+  formData: FormData,
+  artifactVersion: string,
+): Promise<ParsedArtifactMeta> {
+  if (kind !== "firmware") {
+    try {
+      JSON.parse(rawMetaJson);
+    } catch {
+      return { error: "Metadata must be valid JSON." };
+    }
+    return { metaJson: rawMetaJson };
+  }
+
+  const hwName = String(formData.get("fw_hw_name") ?? "").trim();
+  const hwVersion = String(formData.get("fw_hw_version") ?? "").trim();
+
+  if ((hwName === "") !== (hwVersion === "")) {
+    return {
+      error: "Name both the hardware board and its revision, or neither.",
+    };
+  }
+
+  const candidate = {
+    target: String(formData.get("fw_target") ?? ""),
+    // Single version of truth: the firmware metadata version always mirrors
+    // the artifact's own version field.
+    version: artifactVersion,
+    profile: String(formData.get("fw_profile") ?? ""),
+    sizeBytes:
+      String(formData.get("fw_size") ?? "").trim() === ""
+        ? undefined
+        : formData.get("fw_size"),
+    checksum: String(formData.get("fw_checksum") ?? ""),
+    targetHardware:
+      hwName === "" ? undefined : { name: hwName, version: hwVersion },
+  };
+
+  const validated = firmwareMetaSchema.safeParse(candidate);
+  if (!validated.success) {
+    return {
+      error:
+        validated.error.issues[0]?.message ?? "Check the firmware details.",
+    };
+  }
+
+  if (validated.data.targetHardware) {
+    const target = await prisma.artifact.findFirst({
+      where: {
+        projectId,
+        name: validated.data.targetHardware.name,
+        version: validated.data.targetHardware.version,
+      },
+    });
+    if (!target) {
+      return {
+        error: `No "${validated.data.targetHardware.name} @ ${validated.data.targetHardware.version}" in this project — add the hardware revision first or fix the target.`,
+      };
+    }
+  }
+
+  return { metaJson: JSON.stringify(validated.data, null, 2) };
+}
 
 export async function createArtifactAction(
   _previous: RecordActionState,
@@ -493,7 +560,6 @@ export async function createArtifactAction(
     kind: formData.get("kind"),
     name: formData.get("name"),
     version: formData.get("version"),
-    hash: formData.get("hash"),
     metaJson: formData.get("metaJson"),
   });
 
@@ -501,7 +567,27 @@ export async function createArtifactAction(
     return fail(parsed.error.issues[0]?.message ?? "Check the artifact.");
   }
 
-  await prisma.artifact.create({ data: parsed.data });
+  const meta = await parseArtifactMeta(
+    parsed.data.projectId,
+    parsed.data.kind,
+    parsed.data.metaJson,
+    formData,
+    parsed.data.version,
+  );
+  if ("error" in meta) {
+    return fail(meta.error);
+  }
+
+  await prisma.artifact.create({
+    data: {
+      projectId: parsed.data.projectId,
+      kind: parsed.data.kind,
+      name: parsed.data.name,
+      version: parsed.data.version,
+      hash: "",
+      metaJson: meta.metaJson,
+    },
+  });
 
   return done(parsed.data.projectId, "Artifact recorded.");
 }
@@ -518,12 +604,22 @@ export async function updateArtifactAction(
       kind: formData.get("kind"),
       name: formData.get("name"),
       version: formData.get("version"),
-      hash: formData.get("hash"),
       metaJson: formData.get("metaJson"),
     });
 
   if (!parsed.success) {
     return fail(parsed.error.issues[0]?.message ?? "Check the artifact.");
+  }
+
+  const meta = await parseArtifactMeta(
+    parsed.data.projectId,
+    parsed.data.kind,
+    parsed.data.metaJson,
+    formData,
+    parsed.data.version,
+  );
+  if ("error" in meta) {
+    return fail(meta.error);
   }
 
   const updated = await prisma.artifact.updateMany({
@@ -532,8 +628,7 @@ export async function updateArtifactAction(
       kind: parsed.data.kind,
       name: parsed.data.name,
       version: parsed.data.version,
-      hash: parsed.data.hash,
-      metaJson: parsed.data.metaJson,
+      metaJson: meta.metaJson,
     },
   });
 
@@ -560,6 +655,43 @@ export async function deleteArtifactAction(
   }
 
   return done(projectId, "Artifact deleted.");
+}
+
+export async function setCurrentArtifactAction(
+  _previous: RecordActionState,
+  formData: FormData,
+): Promise<RecordActionState> {
+  const projectId = String(formData.get("projectId") ?? "");
+  const recordId = String(formData.get("recordId") ?? "");
+
+  const record = await prisma.artifact.findFirst({
+    where: { id: recordId, projectId },
+  });
+
+  if (!record) {
+    return fail("Artifact not found in this project.");
+  }
+
+  await prisma.$transaction([
+    prisma.artifact.updateMany({
+      where: {
+        projectId,
+        kind: record.kind,
+        name: record.name,
+        id: { not: recordId },
+      },
+      data: { current: false },
+    }),
+    prisma.artifact.update({
+      where: { id: recordId },
+      data: { current: true },
+    }),
+  ]);
+
+  return done(
+    projectId,
+    `Marked ${record.name} ${record.version} as current.`,
+  );
 }
 
 // ---------------------------------------------------------------------------

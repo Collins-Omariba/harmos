@@ -188,10 +188,17 @@ async function main() {
             name: "Tank Monitor Firmware",
             version: "v0.3.0",
             hash: "sha256:9f2c1a7e",
+            current: true,
             metaJson: JSON.stringify({
               target: "HAR-ESP32-01",
+              version: "v0.3.0",
+              profile: "release",
               sizeBytes: 184320,
-              build: "demo",
+              checksum: "sha256:9f2c1a7e",
+              targetHardware: {
+                name: "Tank Monitor Main Board",
+                version: "rev A",
+              },
             }),
           },
           {
@@ -200,6 +207,7 @@ async function main() {
             name: "Tank Monitor Main Board",
             version: "rev A",
             hash: "sha256:4b8d0e21",
+            current: true,
             metaJson: JSON.stringify({
               tool: "KiCad 9",
               layers: 2,
@@ -212,6 +220,7 @@ async function main() {
             name: "HAR-ULTRA-02 Datasheet",
             version: "2026-02",
             hash: "sha256:d41f6c93",
+            current: true,
             metaJson: JSON.stringify({
               pages: 28,
               revision: "2026-02",
