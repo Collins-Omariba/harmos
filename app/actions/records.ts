@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { dollarsToCents } from "@/lib/bom/totals";
@@ -68,6 +69,23 @@ export async function updateProjectAction(
   });
 
   return done(parsed.data.projectId, "Project updated.");
+}
+
+export async function deleteProjectAction(
+  _previous: RecordActionState,
+  formData: FormData,
+): Promise<RecordActionState> {
+  const projectId = idSchema.parse(formData.get("projectId"));
+  const deleted = await prisma.project.deleteMany({
+    where: { id: projectId },
+  });
+
+  if (deleted.count === 0) {
+    return fail("Project not found.");
+  }
+
+  revalidatePath("/");
+  redirect("/");
 }
 
 // ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import {
   Search,
 } from "lucide-react";
 
+import { deleteProjectAction } from "@/app/actions/records";
 import { ArtifactManager } from "@/components/artifact-manager";
 import { ComparisonTab } from "@/components/comparison-tab";
 import { ComponentManager } from "@/components/component-manager";
@@ -16,6 +17,7 @@ import { ProjectEditor } from "@/components/project-editor";
 import { RequirementManager } from "@/components/requirement-manager";
 import { ValidationManager } from "@/components/validation-manager";
 import { ProjectStatusBadge } from "@/components/status-badges";
+import { DeleteButton } from "@/components/record-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -118,14 +120,21 @@ export default async function ProjectPage({
             <p>Created {formatDate(project.createdAt)}</p>
             <p className="mt-1">Updated {formatDate(project.updatedAt)}</p>
             <div className="mt-2">
-              <ProjectEditor
-                project={{
-                  id: project.id,
-                  name: project.name,
-                  brief: project.brief,
-                  status: project.status,
-                }}
-              />
+              <div className="flex items-center justify-end gap-2">
+                <ProjectEditor
+                  project={{
+                    id: project.id,
+                    name: project.name,
+                    brief: project.brief,
+                    status: project.status,
+                  }}
+                />
+                <DeleteButton
+                  action={deleteProjectAction}
+                  fields={{ projectId: project.id }}
+                  label="Delete project"
+                />
+              </div>
             </div>
           </div>
         </div>
