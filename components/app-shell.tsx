@@ -93,7 +93,7 @@ export function AppShell({
 }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background px-3 md:px-4">
+      <header className="flex h-16 shrink-0 items-center gap-2 border-b-2 border-primary/70 bg-background px-3 md:px-5">
         <MobileNav projects={projects} />
         <Link
           href="/"
@@ -102,8 +102,8 @@ export function AppShell({
         >
           <Wordmark />
         </Link>
-        <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
-        <span className="numeric hidden text-[10px] uppercase tracking-[0.18em] text-muted-foreground xl:inline">
+        <span className="mx-1 hidden h-5 w-px bg-primary/60 sm:block" />
+        <span className="numeric hidden text-[10px] uppercase tracking-[0.2em] text-primary xl:inline">
           Engineering workspace
         </span>
         <div className="mx-2 min-w-0 flex-1 sm:mx-4">
@@ -111,7 +111,7 @@ export function AppShell({
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <span className="numeric mr-2 hidden text-[10px] uppercase tracking-[0.16em] text-muted-foreground lg:inline">
-            local · no account
+            local / no account
           </span>
           <ThemeToggle />
         </div>
