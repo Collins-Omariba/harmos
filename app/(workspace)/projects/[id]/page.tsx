@@ -248,7 +248,7 @@ export default async function ProjectPage({
               {padCount(counts.components)} parts
             </span>
           </div>
-          <ComponentManager projectId={project.id} components={project.components} />
+          <ComponentManager projectId={project.id} components={project.components} catalogParts={catalogParts} />
         </TabsContent>
 
         <TabsContent value="artifacts" className="mt-6 space-y-8">

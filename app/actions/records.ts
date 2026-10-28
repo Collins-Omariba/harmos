@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { dollarsToCents } from "@/lib/bom/totals";
+import { catalogToComponentInput } from "@/lib/bom/fromCatalog";
+import { catalog } from "@/lib/catalog";
 import {
   parseAppliesToList,
   parseConstraintValue,
@@ -445,6 +447,73 @@ export async function deleteComponentAction(
   }
 
   return done(projectId, "Component removed from the BOM.");
+}
+
+export async function addCatalogComponentsAction(
+  _previous: RecordActionState,
+  formData: FormData,
+): Promise<RecordActionState> {
+  const projectId = String(formData.get("projectId") ?? "");
+  const partIds = formData
+    .getAll("catalogPartIds")
+    .map(String)
+    .filter(Boolean);
+
+  if (partIds.length === 0) {
+    return fail("Pick at least one catalog part.");
+  }
+  if (partIds.length > 20) {
+    return fail("Add at most 20 parts at a time.");
+  }
+
+  const present = new Set(
+    (
+      await prisma.component.findMany({
+        where: { projectId },
+        select: { partNumber: true },
+      })
+    ).map((c) => c.partNumber),
+  );
+
+  const parts = await catalog.getPartsByIds([...new Set(partIds)]);
+  let added = 0;
+  let skipped = 0;
+
+  for (const part of parts) {
+    if (present.has(part.partNumber)) {
+      skipped += 1;
+      continue;
+    }
+    const rawQty = formData.get(`qty_${part.id}`);
+    const parsedQty =
+      rawQty === null || String(rawQty).trim() === "" ? 1 : Number(rawQty);
+    const input = catalogToComponentInput(
+      part,
+      Number.isFinite(parsedQty) ? parsedQty : 1,
+    );
+    await prisma.component.create({
+      data: {
+        projectId,
+        partNumber: input.partNumber,
+        manufacturer: input.manufacturer,
+        package: input.package,
+        datasheetUrl: input.datasheetUrl,
+        notes: input.notes,
+        quantity: input.quantity,
+        unitPriceCents: input.unitPriceCents,
+      },
+    });
+    present.add(part.partNumber);
+    added += 1;
+  }
+
+  if (added === 0) {
+    return done(projectId, "Those parts are already in the BOM.");
+  }
+  return done(
+    projectId,
+    `Added ${added} part${added === 1 ? "" : "s"} from the catalog${skipped > 0 ? ` (${skipped} already in the BOM).` : "."}`,
+  );
 }
 
 // ---------------------------------------------------------------------------

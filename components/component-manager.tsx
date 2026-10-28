@@ -1,13 +1,16 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
 import {
+  addCatalogComponentsAction,
   createComponentAction,
   deleteComponentAction,
   updateComponentAction,
 } from "@/app/actions/records";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { computeBomTotals, formatCents } from "@/lib/bom/totals";
+import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import {
   AddButton,
   DeleteButton,
@@ -120,18 +124,155 @@ function ComponentFields({ component }: { component?: ComponentRow }) {
   );
 }
 
+function AddFromCatalog({
+  projectId,
+  parts,
+}: {
+  projectId: string;
+  parts: CatalogPart[];
+}) {
+  const [category, setCategory] = useState<string>(
+    CATALOG_CATEGORIES[0]?.key ?? "",
+  );
+  const [query, setQuery] = useState("");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return parts.filter((part) => {
+      if (category !== "all" && part.category !== category) {
+        return false;
+      }
+      if (!needle) {
+        return true;
+      }
+      return [part.partNumber, part.manufacturer, part.description]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [parts, category, query]);
+
+  function toggle(id: string) {
+    setChecked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <RecordDialog
+      title="Add from catalog"
+      description="Real parts with sourced specs. Prices come along as a starting point — adjust them in the BOM."
+      action={addCatalogComponentsAction}
+      submitLabel={`Add ${checked.size} part${checked.size === 1 ? "" : "s"} to BOM`}
+      trigger={
+        <Button variant="outline" size="sm">
+          Catalog
+        </Button>
+      }
+    >
+      <HiddenFields fields={{ projectId }} />
+      <div className="grid grid-cols-[1fr_2fr] gap-4">
+        <Field label="Category" htmlFor="bom-import-category">
+          <select
+            id="bom-import-category"
+            value={category}
+            onChange={(event) => {
+              setCategory(event.target.value);
+              setChecked(new Set());
+            }}
+            className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <option value="all">All categories</option>
+            {CATALOG_CATEGORIES.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Search" htmlFor="bom-import-search">
+          <TextInput
+            id="bom-import-search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Part, manufacturer, description…"
+          />
+        </Field>
+      </div>
+      <div className="max-h-64 divide-y divide-border overflow-y-auto rounded-md border border-border">
+        {visible.map((part) => {
+          const on = checked.has(part.id);
+          return (
+            <label
+              key={part.id}
+              className="flex cursor-pointer items-center gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40"
+            >
+              <input
+                type="checkbox"
+                name="catalogPartIds"
+                value={part.id}
+                checked={on}
+                onChange={() => toggle(part.id)}
+                className="size-4 shrink-0 accent-primary"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="numeric block text-xs font-medium text-foreground">
+                  {part.partNumber}
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    {part.manufacturer} · {part.package}
+                  </span>
+                </span>
+                <span className="numeric block text-[10px] text-muted-foreground">
+                  {part.priceUsd !== null ? `$${part.priceUsd.toFixed(2)}` : "price unknown"} · {part.description.slice(0, 80)}
+                </span>
+              </span>
+              {on ? (
+                <input
+                  type="number"
+                  name={`qty_${part.id}`}
+                  defaultValue={1}
+                  min={0}
+                  step={1}
+                  aria-label={`Quantity for ${part.partNumber}`}
+                  onClick={(event) => event.stopPropagation()}
+                  className="h-7 w-16 shrink-0 rounded-md border border-input bg-background px-1.5 text-xs text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                />
+              ) : null}
+            </label>
+          );
+        })}
+        {visible.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+            No catalog parts match.
+          </p>
+        ) : null}
+      </div>
+    </RecordDialog>
+  );
+}
+
 export function ComponentManager({
   projectId,
   components,
+  catalogParts,
 }: {
   projectId: string;
   components: ComponentRow[];
+  catalogParts: CatalogPart[];
 }) {
   const totals = computeBomTotals(components);
 
   return (
     <div>
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex justify-end gap-2">
+        <AddFromCatalog projectId={projectId} parts={catalogParts} />
         <RecordDialog
           title="Add component"
           description="Selected parts land here and in the BOM below."
