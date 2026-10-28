@@ -67,6 +67,7 @@ test("the seeded presets score every catalog part deterministically", () => {
     const constraints = preset.constraints.map((constraint, index) => ({
       ...constraint,
       id: `${preset.key}-${index}`,
+      appliesTo: [],
     }));
 
     const first = scoreCandidates(parts, constraints);

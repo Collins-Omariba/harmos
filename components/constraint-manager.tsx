@@ -8,6 +8,7 @@ import {
   updateConstraintAction,
 } from "@/app/actions/records";
 import { Badge } from "@/components/ui/badge";
+import { CATALOG_CATEGORIES } from "@/lib/catalog/types";
 import { COMPARISON_OPERATORS, COMPARISON_METRICS, getMetricDef } from "@/lib/comparison/metrics";
 import { formatExpected } from "@/lib/comparison/scorer";
 import type { ComparisonConstraint } from "@/lib/comparison/types";
@@ -29,6 +30,23 @@ function ConstraintFields({ constraint }: { constraint?: ComparisonConstraint })
   const operators = COMPARISON_OPERATORS.filter(
     (op) => op.forType === "both" || op.forType === (def?.valueType ?? "number"),
   );
+  const initiallyScoped =
+    constraint && constraint.appliesTo.length > 0
+      ? new Set(constraint.appliesTo)
+      : new Set(CATALOG_CATEGORIES.map((category) => category.key));
+  const [scoped, setScoped] = useState<Set<string>>(initiallyScoped);
+
+  function toggleCategory(key: string) {
+    setScoped((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
 
   return (
     <>
@@ -110,6 +128,36 @@ function ConstraintFields({ constraint }: { constraint?: ComparisonConstraint })
         it for review. Editing constraints does not rewrite past runs — re-run
         the comparison to apply them.
       </p>
+      <fieldset>
+        <legend className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Applies to (unchecked categories are skipped, not failed)
+        </legend>
+        <div className="mt-1.5 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+          {CATALOG_CATEGORIES.map((category) => {
+            const checked = scoped.has(category.key);
+            return (
+              <label
+                key={category.key}
+                className={`numeric inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                  checked
+                    ? "border-primary/40 bg-primary/10 text-foreground"
+                    : "border-border bg-muted/30 text-muted-foreground"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  name="appliesTo"
+                  value={category.key}
+                  checked={checked}
+                  onChange={() => toggleCategory(category.key)}
+                  className="sr-only"
+                />
+                {category.label}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
     </>
   );
 }

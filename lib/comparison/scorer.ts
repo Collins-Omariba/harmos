@@ -117,6 +117,34 @@ function missingResult(
     ),
     actual,
     passed: false,
+    skipped: false,
+  };
+}
+
+export function appliesToCategory(
+  constraint: ComparisonConstraint,
+  category: string,
+): boolean {
+  return (
+    constraint.appliesTo.length === 0 || constraint.appliesTo.includes(category)
+  );
+}
+
+function skippedResult(constraint: ComparisonConstraint): ConstraintResult {
+  return {
+    constraintId: constraint.id,
+    label: constraint.label,
+    metric: constraint.metric,
+    operator: constraint.operator,
+    kind: constraint.kind,
+    expected: formatExpected(
+      constraint.operator,
+      constraint.value,
+      constraint.unit,
+    ),
+    actual: "not applicable to this category",
+    passed: true,
+    skipped: true,
   };
 }
 
@@ -150,6 +178,7 @@ export function evaluateConstraint(
       ...base,
       actual: `${formatNumber(min)}–${formatNumber(max)} ${constraint.unit ?? "V"}`,
       passed: min <= expected && expected <= max,
+      skipped: false,
     };
   }
 
@@ -158,7 +187,7 @@ export function evaluateConstraint(
   const expected = constraint.value;
 
   if (actual === null) {
-    return { ...base, actual: display, passed: false };
+    return { ...base, actual: display, passed: false, skipped: false };
   }
 
   if (constraint.operator === "includes") {
@@ -171,6 +200,7 @@ export function evaluateConstraint(
             typeof expected === "string" &&
             item.toLowerCase() === expected.toLowerCase(),
         ),
+        skipped: false,
       };
     }
 
@@ -181,6 +211,7 @@ export function evaluateConstraint(
         typeof actual === "string" &&
         typeof expected === "string" &&
         actual.toLowerCase().includes(expected.toLowerCase()),
+      skipped: false,
     };
   }
 
@@ -197,6 +228,7 @@ export function evaluateConstraint(
       ...base,
       actual: display,
       passed: constraint.operator === "eq" ? equal : !equal,
+      skipped: false,
     };
   }
 
@@ -213,7 +245,7 @@ export function evaluateConstraint(
           ? actual > expected
           : actual < expected;
 
-  return { ...base, actual: display, passed };
+  return { ...base, actual: display, passed, skipped: false };
 }
 
 function statusFromCounts(
@@ -238,10 +270,16 @@ export function scoreCandidate(
   constraints: ComparisonConstraint[],
 ): CandidateScore {
   const results = constraints.map((constraint) =>
-    evaluateConstraint(part.specs, constraint),
+    appliesToCategory(constraint, part.category)
+      ? evaluateConstraint(part.specs, constraint)
+      : skippedResult(constraint),
   );
-  const mandatory = results.filter((result) => result.kind === "mandatory");
-  const preferences = results.filter((result) => result.kind === "preference");
+  const applicable = results.filter((result) => !result.skipped);
+  const skipped = results.length - applicable.length;
+  const mandatory = applicable.filter((result) => result.kind === "mandatory");
+  const preferences = applicable.filter(
+    (result) => result.kind === "preference",
+  );
   const mandatoryPassed = mandatory.filter((result) => result.passed).length;
   const preferencePassed = preferences.filter((result) => result.passed).length;
   const mandatoryFailures = mandatory.length - mandatoryPassed;
@@ -259,6 +297,7 @@ export function scoreCandidate(
     mandatoryTotal: mandatory.length,
     preferencePassed,
     preferenceTotal: preferences.length,
+    skipped,
     results,
   };
 }

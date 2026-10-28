@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { dollarsToCents } from "@/lib/bom/totals";
-import { parseConstraintValue } from "@/lib/comparison/constraints";
+import {
+  parseAppliesToList,
+  parseConstraintValue,
+  KNOWN_CATEGORY_COUNT,
+} from "@/lib/comparison/constraints";
 import type { ComparisonOperator } from "@/lib/comparison/types";
 import { prisma } from "@/lib/db";
 
@@ -161,6 +165,7 @@ const constraintSchema = z.object({
   value: z.string().trim().min(1, "Enter a value."),
   unit: z.string().trim().max(12).optional(),
   kind: z.enum(["mandatory", "preference"]),
+  appliesTo: z.array(z.string()).default([]),
 });
 
 export async function createConstraintAction(
@@ -175,11 +180,14 @@ export async function createConstraintAction(
     value: formData.get("value"),
     unit: formData.get("unit") || undefined,
     kind: formData.get("kind"),
+    appliesTo: formData.getAll("appliesTo"),
   });
 
   if (!parsed.success) {
     return fail(parsed.error.issues[0]?.message ?? "Check the constraint.");
   }
+
+  const appliesTo = parseAppliesToList(parsed.data.appliesTo);
 
   const value = parseConstraintValue(
     parsed.data.metric,
@@ -205,6 +213,9 @@ export async function createConstraintAction(
       valueJson: JSON.stringify(value.value),
       unit: parsed.data.unit || null,
       kind: parsed.data.kind,
+      appliesToJson: JSON.stringify(
+        appliesTo.length === 0 || appliesTo.length >= KNOWN_CATEGORY_COUNT ? [] : appliesTo,
+      ),
       position,
     },
   });
@@ -227,11 +238,14 @@ export async function updateConstraintAction(
       value: formData.get("value"),
       unit: formData.get("unit") || undefined,
       kind: formData.get("kind"),
+      appliesTo: formData.getAll("appliesTo"),
     });
 
   if (!parsed.success) {
     return fail(parsed.error.issues[0]?.message ?? "Check the constraint.");
   }
+
+  const appliesTo = parseAppliesToList(parsed.data.appliesTo);
 
   const value = parseConstraintValue(
     parsed.data.metric,
@@ -252,6 +266,9 @@ export async function updateConstraintAction(
       valueJson: JSON.stringify(value.value),
       unit: parsed.data.unit || null,
       kind: parsed.data.kind,
+      appliesToJson: JSON.stringify(
+        appliesTo.length === 0 || appliesTo.length >= KNOWN_CATEGORY_COUNT ? [] : appliesTo,
+      ),
     },
   });
 

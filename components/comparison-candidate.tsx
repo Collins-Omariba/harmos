@@ -15,7 +15,10 @@ export function ComparisonCandidate({
   reason: string;
 }) {
   const { part, results, status, score, explanation } = payload;
-  const failed = results.filter((result) => !result.passed).length;
+  const failed = results.filter(
+    (result) => !result.passed && !result.skipped,
+  ).length;
+  const skippedCount = results.filter((result) => result.skipped).length;
 
   return (
     <article
@@ -93,6 +96,7 @@ export function ComparisonCandidate({
           </p>
           <p className="numeric mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {failed === 0 ? "all constraints met" : `${failed} missed`}
+            {skippedCount > 0 ? ` · ${skippedCount} n/a` : ""}
           </p>
         </div>
       </div>
@@ -112,14 +116,18 @@ export function ComparisonCandidate({
                   <span
                     className={cn(
                       "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border",
-                      result.passed
-                        ? "border-primary/35 bg-primary/10 text-primary"
-                        : result.kind === "mandatory"
-                          ? "border-destructive/35 bg-destructive/10 text-destructive"
-                          : "border-accent/35 bg-accent/10 text-accent",
+                      result.skipped
+                        ? "border-border bg-muted/40 text-muted-foreground"
+                        : result.passed
+                          ? "border-primary/35 bg-primary/10 text-primary"
+                          : result.kind === "mandatory"
+                            ? "border-destructive/35 bg-destructive/10 text-destructive"
+                            : "border-accent/35 bg-accent/10 text-accent",
                     )}
                   >
-                    {result.passed ? (
+                    {result.skipped ? (
+                      <span className="text-[9px] leading-none">–</span>
+                    ) : result.passed ? (
                       <Check className="size-2.5" />
                     ) : (
                       <X className="size-2.5" />
@@ -130,8 +138,9 @@ export function ComparisonCandidate({
                       {result.label}
                     </span>
                     <span className="numeric mt-0.5 block text-[10px] text-muted-foreground">
-                      {result.kind === "mandatory" ? "hard" : "preference"} ·{" "}
-                      {result.expected} · actual {result.actual}
+                      {result.skipped
+                        ? "not applicable to this category"
+                        : `${result.kind === "mandatory" ? "hard" : "preference"} · ${result.expected} · actual ${result.actual}`}
                     </span>
                   </span>
                 </div>

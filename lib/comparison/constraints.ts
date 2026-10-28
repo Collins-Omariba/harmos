@@ -10,6 +10,7 @@ import {
   getMetricDef,
   operatorsForMetric,
 } from "@/lib/comparison/metrics";
+import { CATALOG_CATEGORY_KEYS } from "@/lib/catalog/types";
 
 type ConstraintRow = {
   id: string;
@@ -19,6 +20,7 @@ type ConstraintRow = {
   valueJson: string;
   unit: string | null;
   kind: string;
+  appliesToJson?: string | null;
 };
 
 const OPERATORS: ComparisonOperator[] = [
@@ -95,8 +97,31 @@ export function toDomainConstraint(row: ConstraintRow): ComparisonConstraint {
     value: decodeConstraintValue(row.valueJson),
     unit: row.unit,
     kind: row.kind === "preference" ? "preference" : "mandatory",
+    appliesTo: parseAppliesTo(row.appliesToJson),
   };
 }
+
+export function parseAppliesTo(raw: string | null | undefined): string[] {
+  if (!raw) {
+    return [];
+  }
+  try {
+    const value: unknown = JSON.parse(raw);
+    return Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function parseAppliesToList(values: string[]): string[] {
+  return [...new Set(values)].filter((category) =>
+    (CATALOG_CATEGORY_KEYS as readonly string[]).includes(category),
+  );
+}
+
+export const KNOWN_CATEGORY_COUNT = CATALOG_CATEGORY_KEYS.length;
 
 export function parseConstraintSnapshot(
   raw: string,
@@ -126,6 +151,11 @@ export function parseConstraintSnapshot(
         ...constraint,
         unit: constraint.unit ?? null,
         kind: constraint.kind === "preference" ? "preference" : "mandatory",
+        appliesTo: Array.isArray(constraint.appliesTo)
+          ? constraint.appliesTo.filter(
+              (entry): entry is string => typeof entry === "string",
+            )
+          : [],
       }));
   } catch {
     return [];

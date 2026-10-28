@@ -3,7 +3,7 @@ import test from "node:test";
 
 import type { CatalogPart } from "@/lib/catalog/types";
 import { scoreCandidate, scoreCandidates } from "@/lib/comparison/scorer";
-import { buildDeterministicSummary } from "@/lib/comparison/summary";
+import { buildDeterministicReason, buildDeterministicSummary } from "@/lib/comparison/summary";
 import type { ComparisonConstraint } from "@/lib/comparison/types";
 
 function part(overrides: Partial<CatalogPart> = {}): CatalogPart {
@@ -46,6 +46,7 @@ function constraint(
     value: 3.3,
     unit: "V",
     kind: "mandatory",
+    appliesTo: [],
     ...overrides,
   };
 }
@@ -242,4 +243,71 @@ test("deterministic summary mentions counts and the leader", () => {
   assert.match(summary, /1 candidate scored/);
   assert.match(summary, /1 pass/);
   assert.match(summary, /TEST-001 ranks first/);
+});
+
+test("constraints scoped to other categories are skipped, not failed", () => {
+  const score = scoreCandidate(part(), [
+    constraint(),
+    constraint({
+      id: "constraint-2",
+      label: "LTE connectivity",
+      metric: "wireless",
+      operator: "includes",
+      value: "lte",
+      unit: null,
+      appliesTo: ["cellular"],
+    }),
+  ]);
+
+  assert.equal(score.status, "pass");
+  assert.equal(score.score, 100);
+  assert.equal(score.mandatoryPassed, 1);
+  assert.equal(score.mandatoryTotal, 1);
+  assert.equal(score.skipped, 1);
+
+  const skipped = score.results.find(
+    (result) => result.constraintId === "constraint-2",
+  );
+  assert.equal(skipped?.skipped, true);
+  assert.equal(skipped?.passed, true);
+});
+
+test("a scoped-out mandatory constraint cannot fail the candidate", () => {
+  const score = scoreCandidate(
+    part({ specs: { supplyMinV: 3, supplyMaxV: 5.5 } }),
+    [
+      constraint({
+        label: "Covers 12 V",
+        metric: "supplyVoltageV",
+        operator: "covers",
+        value: 12,
+        unit: "V",
+        appliesTo: ["buck"],
+      }),
+    ],
+  );
+
+  assert.equal(score.status, "pass");
+  assert.equal(score.results[0]?.skipped, true);
+});
+
+test("candidates passing nothing applicable still explain the skip", () => {
+  const levelSensor = part({ category: "level-sensor" });
+  const score = scoreCandidate(levelSensor, [
+    constraint({
+      id: "constraint-2",
+      label: "LTE connectivity",
+      metric: "wireless",
+      operator: "includes",
+      value: "lte",
+      unit: null,
+      appliesTo: ["cellular"],
+    }),
+  ]);
+
+  assert.equal(score.status, "pass");
+  assert.equal(score.score, 100);
+
+  const reason = buildDeterministicReason(score);
+  assert.match(reason, /does not apply to this category/);
 });

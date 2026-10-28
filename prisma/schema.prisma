@@ -64,6 +64,9 @@ model ComparisonConstraint {
   kind      String
   position  Int     @default(0)
 
+  /// Catalog categories this constraint applies to, as JSON. Empty means all.
+  appliesToJson String @default("[]")
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])

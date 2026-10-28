@@ -19,6 +19,7 @@ const taskNames = [
   "clarifying_questions",
   "select_resources",
   "explain_comparison",
+  "suggest_constraints",
   "explain_change_impact",
 ];
 
@@ -77,7 +78,7 @@ export function AssistantPanel() {
                   Task contract
                 </h3>
                 <span className="numeric text-[10px] text-muted-foreground">
-                  5
+                  6
                 </span>
               </div>
               <ol className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card/50">

@@ -15,8 +15,14 @@ function firstFailure(
   kind: "mandatory" | "preference",
 ) {
   return score.results.find(
-    (result) => result.kind === kind && !result.passed,
+    (result) => result.kind === kind && !result.passed && !result.skipped,
   );
+}
+
+function skippedNote(score: CandidateScore): string {
+  return score.skipped > 0
+    ? ` ${score.skipped} ${score.skipped === 1 ? "constraint does" : "constraints do"} not apply to this category.`
+    : "";
 }
 
 export function buildDeterministicReason(score: CandidateScore): string {
@@ -26,7 +32,7 @@ export function buildDeterministicReason(score: CandidateScore): string {
       ? `Fails mandatory constraint "${failure.label}" (needs ${failure.expected}, has ${failure.actual}).`
       : "Fails at least one mandatory constraint.";
 
-    return `${base} Passes ${score.mandatoryPassed} of ${score.mandatoryTotal} mandatory and ${score.preferencePassed} of ${score.preferenceTotal} preference constraints. Deterministic score ${score.score}/100.`;
+    return `${base} Passes ${score.mandatoryPassed} of ${score.mandatoryTotal} mandatory and ${score.preferencePassed} of ${score.preferenceTotal} preference constraints.${skippedNote(score)} Deterministic score ${score.score}/100.`;
   }
 
   if (score.status === "review") {
@@ -35,10 +41,10 @@ export function buildDeterministicReason(score: CandidateScore): string {
       ? `Meets every mandatory constraint but misses preference "${failure.label}" (needs ${failure.expected}, has ${failure.actual}).`
       : "Meets every mandatory constraint but misses at least one preference.";
 
-    return `${base} Deterministic score ${score.score}/100.`;
+    return `${base}${skippedNote(score)} Deterministic score ${score.score}/100.`;
   }
 
-  return `Meets all ${plural(score.mandatoryTotal + score.preferenceTotal, "constraint")}. Deterministic score ${score.score}/100.`;
+  return `Meets all ${plural(score.mandatoryTotal + score.preferenceTotal, "constraint")}.${skippedNote(score)} Deterministic score ${score.score}/100.`;
 }
 
 export function buildDeterministicSummary(scores: CandidateScore[]): string {

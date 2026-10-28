@@ -546,6 +546,126 @@ export const COMPARISON_PRESETS: ComparisonPreset[] = [
       ),
     ],
   },
+  {
+    key: "transceiver",
+    name: "RS-485 transceiver",
+    description:
+      "Compare RS-485 transceivers for a 3.3 V logic side and a Modbus bus.",
+    constraints: [
+      constraint(
+        "Runs from the 3.3 V logic rail",
+        "supplyVoltageV",
+        "covers",
+        3.3,
+        "V",
+        "mandatory",
+      ),
+      constraint(
+        "Speaks RS-485 (Modbus RTU)",
+        "interfaces",
+        "includes",
+        "rs-485",
+        null,
+        "mandatory",
+      ),
+      constraint(
+        "UART-side interface",
+        "interfaces",
+        "includes",
+        "uart",
+        null,
+        "mandatory",
+      ),
+      constraint(
+        "Price at or below $8",
+        "priceUsd",
+        "lte",
+        8,
+        "USD",
+        "preference",
+      ),
+    ],
+  },
+  {
+    key: "cellular",
+    name: "Cellular module",
+    description:
+      "Compare cellular modules for a 3.8 V battery rail and LTE connectivity.",
+    constraints: [
+      constraint(
+        "Accepts a 3.8 V battery rail",
+        "supplyVoltageV",
+        "covers",
+        3.8,
+        "V",
+        "mandatory",
+      ),
+      constraint(
+        "LTE connectivity",
+        "wireless",
+        "includes",
+        "lte",
+        null,
+        "mandatory",
+      ),
+      constraint(
+        "UART control interface",
+        "interfaces",
+        "includes",
+        "uart",
+        null,
+        "preference",
+      ),
+      constraint(
+        "Price at or below $30",
+        "priceUsd",
+        "lte",
+        30,
+        "USD",
+        "preference",
+      ),
+    ],
+  },
+  {
+    key: "gnss",
+    name: "GNSS module",
+    description:
+      "Compare positioning modules for a 3.3 V rail and UART NMEA output.",
+    constraints: [
+      constraint(
+        "Runs from the 3.3 V rail",
+        "supplyVoltageV",
+        "covers",
+        3.3,
+        "V",
+        "mandatory",
+      ),
+      constraint(
+        "NMEA output over UART",
+        "interfaces",
+        "includes",
+        "uart",
+        null,
+        "mandatory",
+      ),
+      constraint(
+        "I2C auxiliary interface",
+        "interfaces",
+        "includes",
+        "i2c",
+        null,
+        "preference",
+      ),
+      constraint(
+        "Price at or below $25",
+        "priceUsd",
+        "lte",
+        25,
+        "USD",
+        "preference",
+      ),
+    ],
+  },
 ];
 
 export function getComparisonPreset(
@@ -576,5 +696,6 @@ export function constraintsFromPreset(
     value: constraint.value,
     unit: constraint.unit,
     kind: constraint.kind,
+    appliesTo: [],
   }));
 }

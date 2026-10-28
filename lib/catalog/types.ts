@@ -63,6 +63,21 @@ export const CATALOG_CATEGORIES = [
     label: "Load switches",
     description: "Power muxes, ideal diodes, and load switches.",
   },
+  {
+    key: "transceiver",
+    label: "Transceivers",
+    description: "RS-485 and bus transceivers for Modbus and field buses.",
+  },
+  {
+    key: "cellular",
+    label: "Cellular modules",
+    description: "2G, LTE Cat-1/4, LTE-M, and NB-IoT modules.",
+  },
+  {
+    key: "gnss",
+    label: "GNSS modules",
+    description: "GPS and multi-constellation positioning modules.",
+  },
 ] as const;
 
 export type CatalogCategoryKey = (typeof CATALOG_CATEGORIES)[number]["key"];

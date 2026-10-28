@@ -32,6 +32,8 @@ export const COMPARISON_OPERATORS: {
  */
 export const COMPARISON_METRICS: MetricDef[] = [
   { metric: "supplyVoltageV", label: "Supply voltage (range covers)", valueType: "number", units: ["V"] },
+  { metric: "supplyMinV", label: "Minimum supply voltage", valueType: "number", units: ["V"] },
+  { metric: "supplyMaxV", label: "Maximum supply voltage", valueType: "number", units: ["V"] },
   { metric: "rangeM", label: "Measurement range", valueType: "number", units: ["m"] },
   { metric: "minRangeM", label: "Minimum range", valueType: "number", units: ["m"] },
   { metric: "resolutionMm", label: "Resolution", valueType: "number", units: ["mm"] },

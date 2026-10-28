@@ -22,6 +22,11 @@ export type ComparisonConstraint = {
   value: ConstraintValue;
   unit: string | null;
   kind: ConstraintKind;
+  /**
+   * Catalog categories this constraint applies to. Empty means all.
+   * Non-applicable constraints are skipped (not failed) when scoring.
+   */
+  appliesTo: string[];
 };
 
 export type CandidateStatus = "pass" | "review" | "fail";
@@ -35,6 +40,8 @@ export type ConstraintResult = {
   expected: string;
   actual: string;
   passed: boolean;
+  /** True when the constraint does not apply to the part's category. */
+  skipped: boolean;
 };
 
 export type CandidateScore = {
@@ -45,6 +52,7 @@ export type CandidateScore = {
   mandatoryTotal: number;
   preferencePassed: number;
   preferenceTotal: number;
+  skipped: number;
   results: ConstraintResult[];
 };
 
