@@ -171,12 +171,13 @@ export function NewProjectButton({ className }: { className?: string }) {
                 htmlFor="new-project-brief"
                 className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
               >
-                Brief
+                Brief (20 characters minimum)
               </label>
               <span
                 className={`numeric text-[10px] ${briefOk ? "text-muted-foreground" : "text-destructive"}`}
+                aria-live="polite"
               >
-                {briefLen}/20 minimum
+                {briefLen}/20 characters
               </span>
             </div>
             <textarea
