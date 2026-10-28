@@ -130,22 +130,26 @@ export function RecordDialog({
   );
 }
 
-export function AddButton({ label }: { label: string }) {
+export function AddButton({
+  label,
+  ...props
+}: { label: string } & React.ComponentProps<typeof Button>) {
   return (
-    <Button variant="outline" size="sm">
+    <Button variant="outline" size="sm" {...props}>
       <Plus data-icon="inline-start" />
       {label}
     </Button>
   );
 }
 
-export function EditButton() {
+export function EditButton(props: React.ComponentProps<typeof Button>) {
   return (
     <Button
       variant="ghost"
       size="icon"
       className="size-7 text-muted-foreground hover:text-foreground"
       aria-label="Edit"
+      {...props}
     >
       <Pencil className="size-3.5" />
     </Button>
