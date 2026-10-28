@@ -24,7 +24,7 @@ export function BackgroundArt() {
           fill
           sizes="46rem"
           quality={60}
-          priority={false}
+          loading="eager"
           className="object-cover [mask-image:linear-gradient(to_left,black_25%,transparent_92%),linear-gradient(to_bottom,transparent,black_12%,black_82%,transparent)] [mask-composite:intersect] saturate-50 sepia-[0.15] dark:brightness-[0.8]"
         />
       </div>
