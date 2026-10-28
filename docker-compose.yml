@@ -13,6 +13,7 @@ services:
       HARMOS_AI_MODEL: "muse-spark-1.3"
       HARMOS_CACHE_DIR: "/data/.cache"
       HARMOS_DEMO_MODE: "${HARMOS_DEMO_MODE:-0}"
+      HARMOS_WEB_SEARCH: "${HARMOS_WEB_SEARCH:-0}"
     volumes:
       # /data holds harmos.db; /data/.cache holds the AI disk cache.
       - harmos-data:/data

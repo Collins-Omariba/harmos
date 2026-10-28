@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CATALOG_CATEGORIES } from "@/lib/catalog/types";
 import { catalog } from "@/lib/catalog";
 import { toDomainConstraint } from "@/lib/comparison/constraints";
+import { webSearchEnabled } from "@/lib/research";
 import { prisma } from "@/lib/db";
 import { formatDate, padCount } from "@/lib/format";
 
@@ -324,6 +325,7 @@ export default async function ProjectPage({
             projectId={project.id}
             resources={project.resources}
             catalogParts={catalogParts}
+            webSearch={webSearchEnabled()}
           />
         </TabsContent>
 

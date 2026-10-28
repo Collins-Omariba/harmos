@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { selectResources } from "@/lib/ai/tasks/select_resources";
 import { catalog } from "@/lib/catalog";
+import { liveWebSearch, RESOURCE_KINDS } from "@/lib/research";
 import { prisma } from "@/lib/db";
 
 export type ResearchActionState = {
@@ -20,14 +21,6 @@ function done(projectId: string, message: string): ResearchActionState {
   revalidatePath(`/projects/${projectId}`);
   return { ok: true, message };
 }
-
-export const RESOURCE_KINDS = [
-  "datasheet",
-  "app-note",
-  "standard",
-  "reference",
-  "other",
-] as const;
 
 const resourceSchema = z.object({
   projectId: z.string().min(1),
@@ -242,6 +235,31 @@ export async function importCatalogResourcesAction(
       ? `Indexed ${added} source${added === 1 ? "" : "s"} from the catalog.`
       : "Those sources are already indexed.",
   );
+}
+
+export async function runWebSearchAction(
+  projectId: string,
+  query: string,
+): Promise<ResearchActionState> {
+  const trimmed = query.trim();
+
+  if (trimmed.length < 3) {
+    return fail("Type a query first.");
+  }
+
+  try {
+    await liveWebSearch(trimmed);
+    return fail("Web search returned nothing usable.");
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : "web search failed";
+    if (reason === "web_search_disabled") {
+      return fail("Web search is off (HARMOS_WEB_SEARCH=0).");
+    }
+    return fail(
+      "Web search is not wired to a provider yet — index sources manually for now.",
+    );
+  }
 }
 
 export async function runResourceSelectionAction(

@@ -1,14 +1,20 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { Bookmark, BookmarkCheck, ExternalLink, Sparkles } from "lucide-react";
+import {
+  Bookmark,
+  BookmarkCheck,
+  ExternalLink,
+  Globe,
+  Sparkles,
+} from "lucide-react";
 
 import {
   createResourceAction,
   deleteResourceAction,
   importCatalogResourcesAction,
-  RESOURCE_KINDS,
   runResourceSelectionAction,
+  runWebSearchAction,
   setResourceSelectionAction,
   updateResourceAction,
 } from "@/app/actions/research";
@@ -16,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import { formatDate, padCount } from "@/lib/format";
+import { RESOURCE_KINDS } from "@/lib/research";
 import { cn } from "@/lib/utils";
 import {
   AddButton,
@@ -259,19 +266,31 @@ export function ResearchManager({
   projectId,
   resources,
   catalogParts,
+  webSearch,
 }: {
   projectId: string;
   resources: ResourceRow[];
   catalogParts: CatalogPart[];
+  webSearch: boolean;
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [selecting, startSelecting] = useTransition();
+  const [query, setQuery] = useState("");
+  const [searching, startSearching] = useTransition();
   const selected = resources.filter((resource) => resource.selected);
 
   function runSelection() {
     setMessage(null);
     startSelecting(async () => {
       const result = await runResourceSelectionAction(projectId);
+      setMessage(result?.message ?? null);
+    });
+  }
+
+  function runSearch() {
+    setMessage(null);
+    startSearching(async () => {
+      const result = await runWebSearchAction(projectId, query);
       setMessage(result?.message ?? null);
     });
   }
@@ -351,9 +370,39 @@ export function ResearchManager({
               Resource index
             </p>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">
-              The closed list the AI may choose from. No live web search exists
-              in the code path — every selection cites a stored id and URL.
+              The index is the selection universe: every citation below links
+              a stored source.
             </p>
+            <div className="mt-3 flex max-w-xl items-center gap-2">
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search the web for datasheets…"
+                aria-label="Web search query"
+                disabled={!webSearch}
+                className="h-9 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={runSearch}
+                disabled={!webSearch || searching || query.trim().length < 3}
+                title={
+                  webSearch
+                    ? "Search the web via the AI model"
+                    : "Off — set HARMOS_WEB_SEARCH=1 once a search provider is wired"
+                }
+              >
+                <Globe data-icon="inline-start" />
+                {searching ? "Searching..." : "Web search"}
+              </Button>
+            </div>
+            {!webSearch ? (
+              <p className="numeric mt-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                Web search off · HARMOS_WEB_SEARCH=0
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
