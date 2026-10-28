@@ -17,7 +17,7 @@ export function BackgroundArt() {
       className="pointer-events-none fixed inset-0 overflow-hidden select-none"
     >
       {/* Right-edge band */}
-      <div className="absolute inset-y-0 right-0 w-[min(46rem,72vw)] opacity-[0.20] dark:opacity-[0.14]">
+      <div className="absolute inset-y-0 right-0 w-[min(46rem,72vw)] opacity-[0.12] dark:opacity-[0.10]">
         <Image
           src="/backgrounds/circuit-1.jpg"
           alt=""
@@ -30,7 +30,7 @@ export function BackgroundArt() {
       </div>
 
       {/* Bottom-left accent */}
-      <div className="absolute bottom-0 left-0 h-[min(26rem,44vh)] w-[min(38rem,60vw)] opacity-[0.18] dark:opacity-[0.13]">
+      <div className="absolute bottom-0 left-0 h-[min(26rem,44vh)] w-[min(38rem,60vw)] opacity-[0.10] dark:opacity-[0.09]">
         <Image
           src="/backgrounds/circuit-2.jpg"
           alt=""
@@ -42,7 +42,7 @@ export function BackgroundArt() {
       </div>
 
       {/* Top wash under the header */}
-      <div className="absolute inset-x-0 top-0 h-[min(20rem,30vh)] opacity-[0.14] dark:opacity-[0.10]">
+      <div className="absolute inset-x-0 top-0 h-[min(20rem,30vh)] opacity-[0.08] dark:opacity-[0.06]">
         <Image
           src="/backgrounds/circuit-3.jpg"
           alt=""

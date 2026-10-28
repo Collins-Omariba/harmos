@@ -50,18 +50,18 @@
 
 /* Harmos uses a workshop palette: warm paper, ink, electric blue, and signal green. */
 :root {
-  --background: #f3efe6;
-  --foreground: #1c2328;
-  --card: #fbf9f3;
-  --card-foreground: #1c2328;
-  --popover: #fbf9f3;
-  --popover-foreground: #1c2328;
+  --background: #f6f2ea;
+  --foreground: #111827;
+  --card: #fffdf9;
+  --card-foreground: #111827;
+  --popover: #fffdf9;
+  --popover-foreground: #111827;
   --primary: #245fd1;
   --primary-foreground: #ffffff;
   --secondary: #e4e6d9;
   --secondary-foreground: #28372d;
   --muted: #e9e6dc;
-  --muted-foreground: #69716d;
+  --muted-foreground: #4b5855;
   --accent: #9ab83f;
   --accent-foreground: #ffffff;
   --destructive: #bd302b;
@@ -87,18 +87,18 @@
 }
 
 .dark {
-  --background: #11181b;
-  --foreground: #edf0e8;
-  --card: #182124;
-  --card-foreground: #edf0e8;
-  --popover: #182124;
-  --popover-foreground: #edf0e8;
+  --background: #0f171b;
+  --foreground: #f5f7f2;
+  --card: #172125;
+  --card-foreground: #f5f7f2;
+  --popover: #172125;
+  --popover-foreground: #f5f7f2;
   --primary: #58b8ff;
   --primary-foreground: #07151f;
   --secondary: #24352f;
   --secondary-foreground: #dce8d1;
   --muted: #1c282b;
-  --muted-foreground: #93a09c;
+  --muted-foreground: #b8c3bf;
   --accent: #b7d34d;
   --accent-foreground: #15200d;
   --destructive: #f06a5e;
