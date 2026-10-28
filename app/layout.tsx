@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BackgroundArt } from "@/components/background-art";
 import "./globals.css";
 
 const inter = Inter({
@@ -48,7 +49,10 @@ export default function RootLayout({
           enableSystem={false}
           disableTransitionOnChange
         >
-          <TooltipProvider delayDuration={150}>{children}</TooltipProvider>
+          <TooltipProvider delayDuration={150}>
+            <BackgroundArt />
+            {children}
+          </TooltipProvider>
           <Toaster position="bottom-right" />
         </ThemeProvider>
       </body>
