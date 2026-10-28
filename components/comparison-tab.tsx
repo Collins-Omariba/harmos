@@ -39,6 +39,7 @@ type ComparisonTabProps = {
   run: RunRow | null;
   catalogParts: CatalogPart[];
   categories: { key: string; label: string; description: string }[];
+  existingPartNumbers: string[];
 };
 
 const statusRank: Record<CandidateStatus, number> = {
@@ -63,7 +64,9 @@ export function ComparisonTab({
   run,
   catalogParts,
   categories,
+  existingPartNumbers,
 }: ComparisonTabProps) {
+  const inBom = new Set(existingPartNumbers);
   const candidates = (run?.candidates ?? [])
     .map((candidate) => ({
       candidate,
@@ -197,6 +200,8 @@ export function ComparisonTab({
               key={candidate.id}
               payload={payload}
               reason={candidate.reason}
+              projectId={projectId}
+              inBom={inBom.has(payload.part.partNumber)}
             />
           ))}
         </div>

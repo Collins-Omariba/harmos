@@ -339,6 +339,7 @@ export default async function ProjectPage({
               label: category.label,
               description: category.description,
             }))}
+            existingPartNumbers={project.components.map((c) => c.partNumber)}
           />
         </TabsContent>
 
@@ -346,7 +347,7 @@ export default async function ProjectPage({
           <EmptyState
             icon={Network}
             title="Dependency graph not built yet"
-            description={`${padCount(counts.edges)} edges are already recorded. The interactive artifact graph and change-impact preview land in M4.`}
+            description={`${padCount(counts.edges)} edges are already recorded. The interactive artifact graph and change-impact preview land in M5.`}
           />
         </TabsContent>
       </Tabs>

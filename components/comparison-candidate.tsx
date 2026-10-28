@@ -1,7 +1,12 @@
-import { Check, ExternalLink, X } from "lucide-react";
+"use client";
 
+import { useActionState } from "react";
+import { Check, ExternalLink, PackagePlus, X } from "lucide-react";
+
+import { createComponentAction } from "@/app/actions/records";
 import { CandidateStatusBadge } from "@/components/status-badges";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { isSourceStale, sourceAgeLabel } from "@/lib/catalog/staleness";
 import { catalogCategoryLabel } from "@/lib/catalog/types";
 import type { ComparisonCandidatePayload } from "@/lib/comparison/types";
@@ -10,15 +15,20 @@ import { cn } from "@/lib/utils";
 export function ComparisonCandidate({
   payload,
   reason,
+  projectId,
+  inBom,
 }: {
   payload: ComparisonCandidatePayload;
   reason: string;
+  projectId: string;
+  inBom: boolean;
 }) {
   const { part, results, status, score, explanation } = payload;
   const failed = results.filter(
     (result) => !result.passed && !result.skipped,
   ).length;
   const skippedCount = results.filter((result) => result.skipped).length;
+  const [, addAction] = useActionState(createComponentAction, null);
 
   return (
     <article
@@ -98,6 +108,43 @@ export function ComparisonCandidate({
             {failed === 0 ? "all constraints met" : `${failed} missed`}
             {skippedCount > 0 ? ` · ${skippedCount} n/a` : ""}
           </p>
+          {inBom ? (
+            <Badge
+              variant="outline"
+              className="numeric mt-2 border-primary/35 bg-primary/10 font-mono text-[10px] uppercase tracking-[0.12em] text-primary"
+            >
+              In BOM
+            </Badge>
+          ) : (
+            <form action={addAction} className="mt-2">
+              <input type="hidden" name="projectId" value={projectId} />
+              <input type="hidden" name="partNumber" value={part.partNumber} />
+              <input
+                type="hidden"
+                name="manufacturer"
+                value={part.manufacturer}
+              />
+              <input type="hidden" name="package" value={part.package} />
+              <input
+                type="hidden"
+                name="datasheetUrl"
+                value={part.datasheetUrl}
+              />
+              <input type="hidden" name="notes" value={part.description} />
+              <input type="hidden" name="quantity" value="1" />
+              <input
+                type="hidden"
+                name="unitPrice"
+                value={
+                  part.priceUsd !== null ? part.priceUsd.toFixed(2) : ""
+                }
+              />
+              <Button type="submit" variant="outline" size="sm" className="h-7 text-[11px]">
+                <PackagePlus data-icon="inline-start" />
+                Add to BOM
+              </Button>
+            </form>
+          )}
         </div>
       </div>
 

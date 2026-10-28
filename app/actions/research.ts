@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { selectResources } from "@/lib/ai/tasks/select_resources";
-import { findSources } from "@/lib/ai/tasks/find_sources";
 import { selectTopResources } from "@/lib/research/heuristic";
 import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
 import { catalog } from "@/lib/catalog";
@@ -253,68 +252,6 @@ export async function importCatalogResourcesAction(
       ? `Indexed ${added} source${added === 1 ? "" : "s"} from the catalog.`
       : "Those sources are already indexed.",
   );
-}
-
-export async function runWebSearchAction(
-  projectId: string,
-  query: string,
-): Promise<ResearchActionState> {
-  const trimmed = query.trim();
-
-  if (trimmed.length < 3) {
-    return fail("Type a query first.");
-  }
-
-  const existing = new Set(
-    (
-      await prisma.resource.findMany({
-        where: { projectId },
-        select: { url: true },
-      })
-    ).map((row) => row.url),
-  );
-
-  let added = 0;
-  try {
-    const { sources } = await findSources({
-      query: trimmed,
-      excludeUrls: [...existing],
-    });
-
-    for (const source of sources.slice(0, 8)) {
-      if (existing.has(source.url)) {
-        continue;
-      }
-      await prisma.resource.create({
-        data: {
-          projectId,
-          title: source.title.slice(0, 200),
-          url: source.url,
-          kind: "reference",
-          summary: source.snippet.slice(0, 500),
-          retrievedAt: new Date(),
-          tags: "web search",
-        },
-      });
-      existing.add(source.url);
-      added += 1;
-    }
-  } catch (error) {
-    return fail(
-      error instanceof Error && error.message.includes("AI_API_KEY")
-        ? "Set AI_API_KEY in .env to use web search."
-        : "Web search failed — index sources manually for now.",
-    );
-  }
-
-  revalidatePath(`/projects/${projectId}`);
-  return {
-    ok: true,
-    message:
-      added > 0
-        ? `Indexed ${added} web source${added === 1 ? "" : "s"} — select the keepers below.`
-        : "Those sources are already indexed.",
-  };
 }
 
 export async function runResourceSelectionAction(
