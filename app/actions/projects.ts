@@ -93,6 +93,7 @@ export async function suggestConstraintsAction(input: {
         kind: suggestion.kind as string,
       })),
       source: result.source,
+      error: result.error,
     };
   } catch {
     return {

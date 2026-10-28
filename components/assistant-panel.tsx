@@ -49,26 +49,26 @@ export function AssistantPanel() {
               </SheetTitle>
               <Badge
                 variant="outline"
-                className="border-accent/35 bg-accent/10 font-mono text-[10px] uppercase tracking-[0.12em] text-accent"
+                className="border-primary/35 bg-primary/10 font-mono text-[10px] uppercase tracking-[0.12em] text-primary"
               >
-                Coming soon
+                On demand
               </Badge>
             </div>
             <SheetDescription>
-              A reserved rail for task-shaped help. It is intentionally empty in
-              v0.
+              Task-shaped help: named, schema-validated AI calls that run only
+              when you ask for them. No free chat, no silent calls.
             </SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6 overflow-y-auto p-5">
             <div className="rounded-lg border border-dashed border-border bg-card/40 p-5">
               <p className="numeric text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                No calls in v0
+                On demand, never chat
               </p>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                The assistant will never chat freely over your project. Each
-                request will be a named, schema-validated task with a disk cache
-                and a log line.
+                Tasks run only when you ask — a comparison run, a suggestion
+                round, a resource selection. Each call is validated, cached on
+                disk so repeats are free, and logged with tokens and latency.
               </p>
             </div>
 

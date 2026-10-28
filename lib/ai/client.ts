@@ -16,9 +16,14 @@ import { z } from "zod";
  *   signature is OpenAI-compatible and provider-agnostic: swap
  *   OPENAI_BASE_URL and HARMOS_AI_MODEL to move providers.
  *
- * v0 intentionally makes no network request. runTask() returns a valid disk
- * cache hit when one exists (used by HARMOS_DEMO_MODE=1) and otherwise throws
- * "not_implemented".
+ * runTask() behavior:
+ * 1. Return a valid disk-cache hit before doing any work.
+ * 2. In demo mode (HARMOS_DEMO_MODE=1) a miss throws instead of calling the
+ *    network, so the demo cannot silently go live.
+ * 3. Without a configured OPENAI_API_KEY a miss throws with setup help.
+ * 4. Otherwise it makes one OpenAI-compatible JSON call, validates the
+ *    response against the output schema, writes the cache, and logs the
+ *    call with real token counts.
  */
 
 export const DEFAULT_OPENAI_BASE_URL = "https://api.meta.ai/v1";
@@ -26,6 +31,7 @@ export const DEFAULT_AI_MODEL = "muse-spark-1.3";
 
 export type AiTaskStatus =
   | "cache_hit"
+  | "ok"
   | "not_implemented"
   | "demo_cache_miss"
   | "error";
@@ -189,15 +195,39 @@ export async function appendAiLog(entry: AiLogEntry): Promise<void> {
 }
 
 /**
+ * Live-call tuning. Low temperature keeps extraction-style tasks
+ * deterministic; the cache (not sampling) is what guarantees repeat runs.
+ */
+export const LIVE_TEMPERATURE = 0.2;
+export const LIVE_MAX_TOKENS = 4000;
+export const LIVE_TIMEOUT_MS = 90_000;
+
+function buildSystemPrompt(outputSchema: z.ZodType): string {
+  let shape = "";
+  try {
+    shape = `\nIt must validate against this JSON schema:\n${JSON.stringify(z.toJSONSchema(outputSchema))}`;
+  } catch {
+    shape = "";
+  }
+
+  return [
+    "You are a JSON-only assistant for a hardware engineering workspace.",
+    "Respond with a single JSON object and nothing else: no markdown fences, no commentary.",
+    "Never invent specifications, part numbers, URLs, or ids that are not in the user message.",
+    shape,
+  ].join("\n");
+}
+
+/**
  * The one and only AI entry point.
  *
- * Signature is fixed for v0:
+ * Signature is fixed:
  *   runTask<T>(taskName, inputSchema, outputSchema, prompt)
  *
- * Future implementations must:
+ * Behavior:
  * 1. compute the cache key from taskName + prompt + inputSchema,
  * 2. return a valid disk cache hit before doing any work,
- * 3. request JSON validated by outputSchema,
+ * 3. request JSON validated by outputSchema (single attempt),
  * 4. write the cache and append one JSON line to logs/ai.log.
  */
 export async function runTask<T>(
@@ -244,13 +274,92 @@ export async function runTask<T>(
     throw new Error(error);
   }
 
-  await appendAiLog({
-    ...logBase,
-    cacheHit: false,
-    latencyMs: Date.now() - startedAt,
-    status: "not_implemented",
-    error: "not_implemented",
-  });
+  if (!config.apiKeyConfigured) {
+    const error = "ai_key_not_configured";
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error,
+    });
+    throw new Error(
+      "OPENAI_API_KEY is not configured. Put a real provider key in .env (it must not be the your_key_here placeholder) to enable live AI tasks.",
+    );
+  }
 
-  throw new Error("not_implemented");
+  try {
+    const client = createOpenAIClient();
+    const completion = await client.chat.completions.create(
+      {
+        model: config.model,
+        messages: [
+          { role: "system", content: buildSystemPrompt(outputSchema) },
+          { role: "user", content: prompt },
+        ],
+        temperature: LIVE_TEMPERATURE,
+        max_tokens: LIVE_MAX_TOKENS,
+        response_format: { type: "json_object" },
+      },
+      { timeout: LIVE_TIMEOUT_MS },
+    );
+
+    const content = completion.choices[0]?.message?.content ?? "";
+    let raw: unknown;
+    try {
+      raw = JSON.parse(content);
+    } catch {
+      throw new Error(
+        `ai_invalid_json:${taskName}: model did not return JSON`,
+      );
+    }
+
+    const validated = outputSchema.safeParse(raw);
+    if (!validated.success) {
+      throw new Error(
+        `ai_invalid_output:${taskName}: ${validated.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
+      );
+    }
+
+    const usage: AiUsage = {
+      inputTokens: completion.usage?.prompt_tokens ?? 0,
+      outputTokens: completion.usage?.completion_tokens ?? 0,
+      totalTokens: completion.usage?.total_tokens ?? 0,
+    };
+
+    await writeTaskCache(taskName, cacheKey, validated.data, usage);
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      tokens: usage,
+      latencyMs: Date.now() - startedAt,
+      status: "ok",
+    });
+
+    return validated.data;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "ai_request_failed";
+    if (
+      message.startsWith("ai_invalid_json") ||
+      message.startsWith("ai_invalid_output")
+    ) {
+      await appendAiLog({
+        ...logBase,
+        cacheHit: false,
+        latencyMs: Date.now() - startedAt,
+        status: "error",
+        error: message,
+      });
+    } else {
+      await appendAiLog({
+        ...logBase,
+        cacheHit: false,
+        latencyMs: Date.now() - startedAt,
+        status: "error",
+        error: `ai_request_failed:${taskName}`,
+      });
+    }
+    throw error instanceof Error ? error : new Error(message);
+  }
 }

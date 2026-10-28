@@ -102,7 +102,11 @@ export async function suggestConstraints(
     categories: string[];
   },
   fallback: ConstraintSuggestion[],
-): Promise<{ suggestions: ConstraintSuggestion[]; source: "ai" | "rules" }> {
+): Promise<{
+  suggestions: ConstraintSuggestion[];
+  source: "ai" | "rules";
+  error?: string;
+}> {
   try {
     const result = await runTask(
       SUGGEST_CONSTRAINTS_TASK,
@@ -127,7 +131,11 @@ export async function suggestConstraints(
     });
 
     return { suggestions, source: "ai" };
-  } catch {
-    return { suggestions: fallback, source: "rules" };
+  } catch (error) {
+    return {
+      suggestions: fallback,
+      source: "rules",
+      error: error instanceof Error ? error.message : "suggestion failed",
+    };
   }
 }
