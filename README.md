@@ -39,8 +39,8 @@ artifact, and decision belongs to it.
 - **Component catalog** Add real parts with sourced specs, category-aware
   entry forms, health/duplicate review queues, gap analysis, and AI-assisted
   proposals that require human approval.
-- **LCSC distributor import** by product code (official API when keys are set,
-  throttled public search otherwise).
+- **LCSC distributor import** by product code (public detail endpoint, no
+  keys needed; signed official API as fallback).
 - **Artifact uploads** (schematics, firmware, datasheets, test logs) with
   SHA-256 recorded at upload time and version resolution.
 - **Change-impact view**: dependency ripple preview and graph before applying
@@ -103,7 +103,7 @@ All in `.env` (see `.env.example`):
 | `HARMOS_UPLOAD_DIR`    | `./data/uploads`         | Artifact file storage root.                          |
 | `HARMOS_CATALOG_ADAPTER` | `local`                | Catalog backend (`local` today; vendor adapters fail loudly until wired). |
 | `HARMOS_SESSION_SECRET` | empty (ephemeral)       | Session signing secret; set it to keep logins across restarts. |
-| `LCSC_API_KEY` / `LCSC_API_SECRET` | empty       | LCSC distributor credentials (optional; public search is used when unset). |
+| `LCSC_API_KEY` / `LCSC_API_SECRET` | empty       | LCSC distributor credentials (optional; official API is the fallback when set). |
 | `LCSC_API_BASE_URL`    | `https://api.lcsc.com`   | LCSC API base URL.                                   |
 
 ## Commands

@@ -111,6 +111,29 @@ test("engineering values parse units and ranges", () => {
   });
 });
 
+test("detail-endpoint param names map: supply variant, tx/rx current, buses", () => {
+  const specs = mapLcscParametersToSpecs([
+    { name: "Voltage  -  Supply", value: "3V~3.6V" },
+    { name: "Operating Temperature", value: "-40℃~+105℃" },
+    { name: "Receive  Current", value: "82mA" },
+    { name: "Current Of Transmitting", value: "350mA" },
+    { name: "Interface", value: "SPI;UART;I2C;I2S;USB;JTAG" },
+    { name: "Wireless Standard", value: "Bluetooth5.0" },
+    { name: "Output Power", value: "20.5dBm" },
+  ]);
+
+  assert.deepEqual(specs, {
+    supplyMinV: 3,
+    supplyMaxV: 3.6,
+    operatingTempMinC: -40,
+    operatingTempMaxC: 105,
+    currentTypA: 0.082,
+    currentMaxA: 0.35,
+    interfaces: ["spi", "uart", "i2c", "i2s", "usb", "jtag"],
+    wireless: ["bluetooth"],
+  });
+});
+
 function mockFetch(handler: (url: string) => unknown) {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: unknown) => {
@@ -124,7 +147,35 @@ function mockFetch(handler: (url: string) => unknown) {
   };
 }
 
-const PRODUCT_FIXTURE = {
+const DETAIL_FIXTURE = {
+  productCode: "C3013922",
+  productModel: "ESP32-C3-MINI-1U-H4",
+  brandNameEn: "ESPRESSIF",
+  productIntroEn: "2.4GHz ESP32-C3FH -104dBm SMD,13.2x12.5mm RF Transceiver Modules and Modems RoHS",
+  title: "ESPRESSIF ESP32-C3-MINI-1U-H4",
+  parentCatalogList: [{ catalogNameEn: "RF and Wireless" }],
+  parentCatalogName: "IoT/Communication Modules",
+  catalogName: "RF Transceiver Modules and Modems",
+  encapStandard: "SMD,13.2x12.5mm",
+  pdfUrl: "https://datasheet.lcsc.com/datasheet/pdf/b85cef.pdf?productCode=C3013922",
+  productImages: ["https://assets.lcsc.com/x.jpg"],
+  stockNumber: 1382,
+  minBuyNumber: 1,
+  currencyType: "USD",
+  currencySymbol: "$",
+  productPriceList: [
+    { ladder: 1, productPrice: "3.4819", usdPrice: 3.4819 },
+    { ladder: 10, productPrice: "3.1148", usdPrice: 3.1148 },
+  ],
+  paramVOList: [
+    { paramName: "工作电压", paramNameEn: "Voltage - Supply", paramValue: "3V~3.6V", paramValueEn: "3V~3.6V" },
+    { paramName: "接口类型", paramNameEn: "Interface", paramValue: "SPI;UART;I2C", paramValueEn: "SPI;UART;I2C" },
+    { paramName: "工作温度", paramNameEn: "Operating Temperature", paramValue: "-40℃~+105℃", paramValueEn: "-40℃~+105℃" },
+    { paramName: "接收电流", paramNameEn: "Receive Current", paramValue: "82mA", paramValueEn: "82mA" },
+  ],
+};
+
+const OFFICIAL_FIXTURE = {
   lcscProductNumber: "C25804",
   manufacturerProductNumber: "0603WAF1002T5E",
   manufacturer: { id: 1, name: "UNI-ROYAL" },
@@ -165,40 +216,103 @@ function withCreds() {
   };
 }
 
-test("search maps the LCSC envelope onto distributor parts", async () => {
-  const restoreCreds = withCreds();
-  const restoreFetch = mockFetch((url) => ({
-    success: true,
-    code: 200,
-    message: "ok",
-    result: {
-      productCount: url.toUpperCase().includes("C25804") ? 1 : 0,
-      products: url.toUpperCase().includes("C25804") ? [PRODUCT_FIXTURE] : [],
-    },
-  }));
+test("exact codes resolve through the public detail endpoint", async () => {
+  const seen: string[] = [];
+  const restoreFetch = mockFetch((url) => {
+    seen.push(url);
+    assert.ok(
+      url.includes("ftps/wm/product/detail"),
+      `codes must hit the public detail endpoint, got ${url}`,
+    );
+    return {
+      code: 200,
+      msg: null,
+      ok: true,
+      result: url.toUpperCase().includes("C3013922") ? DETAIL_FIXTURE : null,
+    };
+  });
 
   try {
-    const found = await fetchLcscPartByCode("c25804");
+    const found = await fetchLcscPartByCode("c3013922");
     assert.ok(found, "exact match resolves");
+    assert.equal(found.productCode, "C3013922");
+    assert.equal(found.mpn, "ESP32-C3-MINI-1U-H4");
+    assert.equal(found.manufacturer, "ESPRESSIF");
+    assert.equal(found.packageName, "SMD,13.2x12.5mm");
+    assert.equal(found.currency, "USD");
+    assert.equal(found.priceBreaks[0]?.unitPrice, 3.4819);
+    assert.equal(found.stockAvailable, 1382);
+    assert.deepEqual(found.categoryPath, [
+      "RF and Wireless",
+      "IoT/Communication Modules",
+      "RF Transceiver Modules and Modems",
+    ]);
+    assert.ok(
+      found.parameters.some((p) => p.name === "Voltage - Supply"),
+      "english params preserved",
+    );
+
+    const missing = await fetchLcscPartByCode("C999999");
+    assert.equal(missing, null);
+    assert.equal(seen.length, 2, "no official-API calls without keys");
+  } finally {
+    restoreFetch();
+  }
+});
+
+test("official API is the fallback when the public lookup fails", async () => {
+  const restoreCreds = withCreds();
+  const seen: string[] = [];
+  const restoreFetch = mockFetch((url) => {
+    seen.push(url);
+    if (url.includes("ftps/wm/product/detail")) {
+      return { code: 500, msg: "boom", result: null };
+    }
+    return {
+      success: true,
+      code: 200,
+      message: "ok",
+      result: { productCount: 1, products: [OFFICIAL_FIXTURE] },
+    };
+  });
+
+  try {
+    const found = await fetchLcscPartByCode("C25804");
+    assert.ok(found, "official fallback resolves");
     assert.equal(found.productCode, "C25804");
     assert.equal(found.mpn, "0603WAF1002T5E");
-    assert.equal(found.manufacturer, "UNI-ROYAL");
-    assert.equal(found.packageName, "0603");
-    assert.equal(found.priceBreaks[0]?.unitPrice, 0.0021);
-    assert.deepEqual(found.categoryPath, [
-      "Resistors",
-      "Thick Film Resistors",
-    ]);
-
-    const missing = await searchLcscParts("C999999", { limit: 5 });
-    assert.deepEqual(missing, []);
+    assert.ok(seen.some((u) => u.includes("ftps/wm/product/detail")));
+    assert.ok(seen.some((u) => u.includes("api.lcsc.com")));
   } finally {
     restoreFetch();
     restoreCreds();
   }
 });
 
-test("LCSC error codes map to actionable errors", async () => {
+test("without keys a failing public lookup surfaces its error", async () => {
+  const savedKey = process.env.LCSC_API_KEY;
+  const savedSecret = process.env.LCSC_API_SECRET;
+  delete process.env.LCSC_API_KEY;
+  delete process.env.LCSC_API_SECRET;
+  const restoreFetch = mockFetch(() => ({ code: 500, msg: "boom", result: null }));
+
+  try {
+    await assert.rejects(
+      fetchLcscPartByCode("C25804"),
+      (error: unknown) => {
+        assert.ok(error instanceof DistributorError);
+        assert.equal(error.code, "bad-response");
+        return true;
+      },
+    );
+  } finally {
+    restoreFetch();
+    if (savedKey !== undefined) process.env.LCSC_API_KEY = savedKey;
+    if (savedSecret !== undefined) process.env.LCSC_API_SECRET = savedSecret;
+  }
+});
+
+test("official API error codes map to actionable errors", async () => {
   const restoreCreds = withCreds();
   try {
     for (const [code, expected] of [
@@ -212,7 +326,8 @@ test("LCSC error codes map to actionable errors", async () => {
         result: null,
       }));
       try {
-        await assert.rejects(searchLcscParts("C25804"), (error: unknown) => {
+        // Non-code keywords go straight to the official API.
+        await assert.rejects(searchLcscParts("STM32F103"), (error: unknown) => {
           assert.ok(error instanceof DistributorError);
           assert.equal(error.code, expected);
           return true;
@@ -226,7 +341,25 @@ test("LCSC error codes map to actionable errors", async () => {
   }
 });
 
-test("no keys selects the throttled public fallback, never the signed API", async () => {
+test("keyword search without keys explains itself", async () => {
+  const savedKey = process.env.LCSC_API_KEY;
+  const savedSecret = process.env.LCSC_API_SECRET;
+  delete process.env.LCSC_API_KEY;
+  delete process.env.LCSC_API_SECRET;
+
+  try {
+    await assert.rejects(searchLcscParts("STM32F103"), (error: unknown) => {
+      assert.ok(error instanceof DistributorError);
+      assert.match(error.message, /exact product code/);
+      return true;
+    });
+  } finally {
+    if (savedKey !== undefined) process.env.LCSC_API_KEY = savedKey;
+    if (savedSecret !== undefined) process.env.LCSC_API_SECRET = savedSecret;
+  }
+});
+
+test("public detail lookups resolve without keys and stay off the signed API", async () => {
   const savedKey = process.env.LCSC_API_KEY;
   const savedSecret = process.env.LCSC_API_SECRET;
   delete process.env.LCSC_API_KEY;
@@ -239,46 +372,30 @@ test("no keys selects the throttled public fallback, never the signed API", asyn
   const restoreFetch = mockFetch((url) => {
     seen.push(url);
     assert.ok(
-      url.includes("lcsc.com/api/products/search"),
-      `fallback must hit the public endpoint, got ${url}`,
+      url.includes("ftps/wm/product/detail"),
+      `codes must hit the public detail endpoint, got ${url}`,
     );
-    return {
-      result: {
-        productList: [
-          {
-            productCode: "C25804",
-            productModel: "0603WAF1002T5E",
-            brandNameEn: "UNI-ROYAL",
-            productStockNumber: 12000,
-            productDesc: "10kΩ ±1% 100mW 0603 Thick Film Resistor",
-            images: [],
-            pdfUrl: "https://datasheet.lcsc.com/x.pdf?productCode=C25804",
-            priceList: [
-              { modifier: 10, price: "0.0021" },
-              { modifier: "100", price: "0.0016" },
-            ],
-          },
-        ],
-      },
-    };
+    return { code: 200, msg: null, ok: true, result: DETAIL_FIXTURE };
   });
 
   try {
-    const found = await fetchLcscPartByCode("c25804");
-    assert.ok(found, "fallback resolves the code");
-    assert.equal(found.productCode, "C25804");
-    assert.equal(found.mpn, "0603WAF1002T5E");
-    assert.equal(found.currency, "UNK");
-    assert.deepEqual(found.priceBreaks, [
-      { breakQuantity: 10, unitPrice: 0.0021 },
-      { breakQuantity: 100, unitPrice: 0.0016 },
-    ]);
+    const found = await fetchLcscPartByCode("c3013922");
+    assert.ok(found, "public lookup resolves the code");
+    assert.equal(found.productCode, "C3013922");
+    assert.equal(found.mpn, "ESP32-C3-MINI-1U-H4");
+    assert.equal(found.currency, "USD");
+    assert.deepEqual(found.priceBreaks[0], {
+      breakQuantity: 1,
+      unitPrice: 3.4819,
+    });
     assert.equal(
       found.sourceUrl,
-      "https://www.lcsc.com/product-detail/C25804.html",
+      "https://www.lcsc.com/product-detail/C3013922.html",
     );
-    assert.equal(found.datasheetUrl, "https://datasheet.lcsc.com/x.pdf?productCode=C25804");
-    assert.deepEqual(found.categoryPath, []);
+    assert.equal(
+      found.datasheetUrl,
+      "https://datasheet.lcsc.com/datasheet/pdf/b85cef.pdf?productCode=C3013922",
+    );
     assert.equal(seen.length, 1);
   } finally {
     restoreFetch();
@@ -287,17 +404,13 @@ test("no keys selects the throttled public fallback, never the signed API", asyn
   }
 });
 
-test("public fallback is throttled to one request per 2 seconds", async () => {
+test("public lookups are throttled to one request per 2 seconds", async () => {
   const { PUBLIC_LCSC_MIN_INTERVAL_MS } = await import(
     "@/lib/distributors/lcsc"
   );
   assert.equal(PUBLIC_LCSC_MIN_INTERVAL_MS, 2000);
 
-  const savedKey = process.env.LCSC_API_KEY;
-  const savedSecret = process.env.LCSC_API_SECRET;
-  delete process.env.LCSC_API_KEY;
-  delete process.env.LCSC_API_SECRET;
-  const restoreFetch = mockFetch(() => ({ result: { productList: [] } }));
+  const restoreFetch = mockFetch(() => ({ code: 200, result: null }));
 
   try {
     const start = Date.now();
@@ -309,8 +422,6 @@ test("public fallback is throttled to one request per 2 seconds", async () => {
     );
   } finally {
     restoreFetch();
-    if (savedKey !== undefined) process.env.LCSC_API_KEY = savedKey;
-    if (savedSecret !== undefined) process.env.LCSC_API_SECRET = savedSecret;
   }
 });
 
@@ -328,7 +439,7 @@ test("import actions validate before touching the network", async () => {
   if (!badCategory.ok) assert.match(badCategory.message, /category/);
 });
 
-test("preview over the public fallback shows unverified pricing, stores none", async () => {
+test("preview over the public endpoint carries verified USD pricing", async () => {
   const savedKey = process.env.LCSC_API_KEY;
   const savedSecret = process.env.LCSC_API_SECRET;
   delete process.env.LCSC_API_KEY;
@@ -337,22 +448,7 @@ test("preview over the public fallback shows unverified pricing, stores none", a
   const original = globalThis.fetch;
   globalThis.fetch = (async () => {
     return new Response(
-      JSON.stringify({
-        result: {
-          productList: [
-            {
-              productCode: "C25804",
-              productModel: "0603WAF1002T5E",
-              brandNameEn: "UNI-ROYAL",
-              productStockNumber: 500,
-              productDesc: "10kΩ ±1% 100mW 0603 Thick Film Resistor",
-              images: [],
-              pdfUrl: "https://datasheet.lcsc.com/x.pdf",
-              priceList: [{ modifier: 10, price: "0.0021" }],
-            },
-          ],
-        },
-      }),
+      JSON.stringify({ code: 200, msg: null, ok: true, result: DETAIL_FIXTURE }),
       { headers: { "content-type": "application/json" } },
     );
   }) as typeof fetch;
@@ -361,13 +457,15 @@ test("preview over the public fallback shows unverified pricing, stores none", a
     const { previewLcscImportAction } = await import(
       "@/app/actions/distributors"
     );
-    const result = await previewLcscImportAction("C25804");
+    const result = await previewLcscImportAction("C3013922");
     assert.equal(result.ok, true);
     if (result.ok) {
-      assert.equal(result.part.priceUsd, null);
-      assert.equal(result.part.currency, "UNK");
-      assert.match(result.part.listingPrice ?? "", /unverified/);
-      assert.equal(result.part.categoryGuess, null);
+      assert.equal(result.part.priceUsd, 3.4819);
+      assert.equal(result.part.currency, "USD");
+      assert.equal(result.part.listingPrice, null);
+      assert.equal(result.part.categoryGuess, "mcu");
+      assert.ok(result.part.mappedSpecCount >= 4);
+      assert.ok(result.part.parameterCount > 0);
     }
   } finally {
     globalThis.fetch = original;

@@ -1,16 +1,16 @@
 /**
  * LCSC distributor client.
  *
- * Two transports, in order of preference:
+ * Primary transport: the public product-detail endpoint
+ * (https://wmsc.lcsc.com/ftps/wm/product/detail?productCode=C…), which needs
+ * no credentials and returns USD prices, English parameters, categories, and
+ * the datasheet link. Throttled to one request per 2 seconds — don't abuse it.
  *
- * 1. Official API (per the "LCSC API Access & Usage Guide" at
- *    https://www.lcsc.com/docs/index.html → downloadable guide) when
- *    LCSC_API_KEY / LCSC_API_SECRET are set. Signed GETs to
- *    https://api.lcsc.com (override with LCSC_API_BASE_URL).
- * 2. Public community fallback (https://lcsc.com/api/products/search, the
- *    endpoint community tools use) when no keys are configured. Best-effort:
- *    no category tree, no spec parameters, unverified currency — and
- *    throttled to one request per 2 seconds.
+ * Fallback transport: the official signed API (per the "LCSC API Access &
+ * Usage Guide" at https://www.lcsc.com/docs/index.html → downloadable guide)
+ * when LCSC_API_KEY / LCSC_API_SECRET are set. Used when the public lookup
+ * fails or for non-code keyword searches.
+ * Base: https://api.lcsc.com (override with LCSC_API_BASE_URL).
  *
  * Server-only: reads secrets from the environment, never import from client
  * components.
@@ -41,9 +41,14 @@ export function getCredentials(): LcscCredentials | null {
   return { key, secret };
 }
 
-export function normalizeLcscCode(raw: string): string {
+export function tryNormalizeCode(raw: string): string | null {
   const code = raw.trim().toUpperCase();
-  if (!LCSC_PRODUCT_CODE.test(code)) {
+  return LCSC_PRODUCT_CODE.test(code) ? code : null;
+}
+
+export function normalizeLcscCode(raw: string): string {
+  const code = tryNormalizeCode(raw);
+  if (!code) {
     throw new DistributorError(
       "lcsc",
       "not-found",
@@ -260,10 +265,10 @@ function asPart(raw: LcscProduct): DistributorPart {
   };
 }
 
-/** Minimum gap between public-search requests (community-endpoint courtesy). */
+/** Minimum gap between public-detail requests — don't abuse the endpoint. */
 export const PUBLIC_LCSC_MIN_INTERVAL_MS = 2000;
 
-const PUBLIC_LCSC_SEARCH_URL = "https://www.lcsc.com/api/products/search";
+const PUBLIC_LCSC_DETAIL_URL = "https://wmsc.lcsc.com/ftps/wm/product/detail";
 const PUBLIC_LCSC_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -271,8 +276,8 @@ let publicLcscQueue: Promise<void> = Promise.resolve();
 let publicLcscLastStart = 0;
 
 /**
- * Serialize public-search calls with at least `intervalMs` between request
- * starts. Exported for tests; the default is the community courtesy limit.
+ * Serialize public lookups with at least `intervalMs` between request
+ * starts. Exported for tests; the default keeps us polite.
  */
 export async function throttlePublicLcsc(
   intervalMs = PUBLIC_LCSC_MIN_INTERVAL_MS,
@@ -294,88 +299,126 @@ export async function throttlePublicLcsc(
   }
 }
 
-type PublicLcscProduct = {
+type PublicDetailParam = {
+  paramNameEn?: string | null;
+  paramName?: string | null;
+  paramValueEn?: string | number | null;
+  paramValue?: string | number | null;
+};
+
+type PublicDetailPrice = {
+  ladder?: number;
+  usdPrice?: number;
+  productPrice?: number | string;
+};
+
+type PublicDetailResult = {
   productCode?: string;
   productModel?: string;
   brandNameEn?: string;
-  productStockNumber?: number | string;
-  productDesc?: string;
-  images?: string[];
+  productIntroEn?: string | null;
+  productDescEn?: string | null;
+  title?: string;
+  catalogName?: string;
+  parentCatalogName?: string;
+  parentCatalogList?: { catalogNameEn?: string }[];
+  encapStandard?: string;
   pdfUrl?: string;
-  priceList?: { modifier?: number | string; price?: number | string }[];
+  productImages?: string[];
+  stockNumber?: number;
+  minBuyNumber?: number;
+  currencyType?: string;
+  productPriceList?: PublicDetailPrice[];
+  paramVOList?: PublicDetailParam[];
 };
 
-function asPublicPart(raw: PublicLcscProduct): DistributorPart {
-  const priceBreaks: DistributorPriceBreak[] = (raw.priceList ?? []).flatMap(
-    (entry) => {
-      const qty = Number(entry.modifier);
-      const unit = Number(entry.price);
-      return Number.isFinite(qty) && Number.isFinite(unit)
-        ? [{ breakQuantity: qty, unitPrice: unit }]
-        : [];
-    },
-  ).sort((a, b) => a.breakQuantity - b.breakQuantity);
-
-  const stock = Number(raw.productStockNumber ?? NaN);
+function asPublicDetailPart(raw: PublicDetailResult): DistributorPart | null {
   const code = String(raw.productCode ?? "").toUpperCase();
+  if (!code) return null;
+
+  const parameters: DistributorParameter[] = (raw.paramVOList ?? []).flatMap(
+    (entry) => {
+      const name = String(entry.paramNameEn ?? entry.paramName ?? "").trim();
+      const value = String(
+        entry.paramValueEn ?? entry.paramValue ?? "",
+      ).trim();
+      return name ? [{ name, value }] : [];
+    },
+  );
+
+  const priceBreaks: DistributorPriceBreak[] = (
+    raw.productPriceList ?? []
+  ).flatMap((entry) => {
+    const qty = Number(entry.ladder);
+    // usdPrice is explicitly USD; productPrice follows currencyType.
+    const unit =
+      entry.usdPrice !== undefined && Number.isFinite(Number(entry.usdPrice))
+        ? Number(entry.usdPrice)
+        : Number(entry.productPrice);
+    return Number.isFinite(qty) && Number.isFinite(unit)
+      ? [{ breakQuantity: qty, unitPrice: unit }]
+      : [];
+  }).sort((a, b) => a.breakQuantity - b.breakQuantity);
+
+  const currency = String(raw.currencyType ?? "USD").toUpperCase();
+  const stock = typeof raw.stockNumber === "number" ? raw.stockNumber : null;
+  const categoryPath = [
+    ...((raw.parentCatalogList ?? [])
+      .map((c) => c.catalogNameEn)
+      .filter(Boolean) as string[]),
+    raw.parentCatalogName,
+    raw.catalogName,
+  ].filter((name): name is string => Boolean(name));
 
   return {
     distributor: "lcsc",
     productCode: code,
     mpn: String(raw.productModel ?? ""),
     manufacturer: String(raw.brandNameEn ?? ""),
-    description: String(raw.productDesc ?? ""),
-    categoryPath: [],
-    packageName: "",
+    description: String(
+      raw.productIntroEn ?? raw.productDescEn ?? raw.title ?? "",
+    ),
+    categoryPath: [...new Set(categoryPath)],
+    packageName: String(raw.encapStandard ?? ""),
     datasheetUrl: raw.pdfUrl?.trim() ? String(raw.pdfUrl) : null,
-    sourceUrl: code
-      ? `https://www.lcsc.com/product-detail/${code}.html`
-      : "",
-    imageUrls: (raw.images ?? []).filter((u) => typeof u === "string"),
-    parameters: [],
+    sourceUrl: `https://www.lcsc.com/product-detail/${code}.html`,
+    imageUrls: (raw.productImages ?? []).filter((u) => typeof u === "string"),
+    parameters,
     priceBreaks,
-    // The public endpoint quotes no currency — never treat it as USD.
-    currency: "UNK",
-    inStock: Number.isFinite(stock) ? (stock as number) > 0 : false,
-    stockAvailable: Number.isFinite(stock) ? (stock as number) : null,
-    minimumOrderQuantity: null,
+    currency,
+    inStock: stock !== null ? stock > 0 : false,
+    stockAvailable: stock,
+    minimumOrderQuantity:
+      typeof raw.minBuyNumber === "number" ? raw.minBuyNumber : null,
   };
 }
 
 /**
- * Public community search fallback. Mirrors a standard site search; carries
- * no auth, so it is throttled and returns slimmer rows than the official API.
+ * Exact-code lookup against the public product-detail endpoint. Returns null
+ * when the code has no product; throws when the endpoint itself fails.
  */
-async function publicLcscSearch(
-  keyword: string,
-  limit = 10,
-): Promise<DistributorPart[]> {
+async function publicLcscPartDetail(
+  code: string,
+): Promise<DistributorPart | null> {
   await throttlePublicLcsc();
-
-  const body = new URLSearchParams({
-    current_page: "1",
-    in_stock: "false",
-    is_RoHS: "false",
-    show_icon: "false",
-    search_content: keyword.trim(),
-  });
 
   let response: Response;
   try {
-    response = await fetch(PUBLIC_LCSC_SEARCH_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": PUBLIC_LCSC_USER_AGENT,
-        Accept: "application/json",
+    response = await fetch(
+      `${PUBLIC_LCSC_DETAIL_URL}?productCode=${quotePlus(code)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Referer: "https://www.lcsc.com/",
+          "User-Agent": PUBLIC_LCSC_USER_AGENT,
+        },
       },
-      body: body.toString(),
-    });
+    );
   } catch (error) {
     throw new DistributorError(
       "lcsc",
       "network",
-      `Could not reach the LCSC public search (${error instanceof Error ? error.message : "network error"}). Set LCSC_API_KEY / LCSC_API_SECRET to use the official API instead.`,
+      `Could not reach the LCSC lookup (${error instanceof Error ? error.message : "network error"}). Set LCSC_API_KEY / LCSC_API_SECRET to use the official API instead.`,
     );
   }
 
@@ -383,50 +426,44 @@ async function publicLcscSearch(
     throw new DistributorError(
       "lcsc",
       "network",
-      `LCSC public search was blocked (HTTP ${response.status}). Set LCSC_API_KEY / LCSC_API_SECRET to use the official API instead.`,
+      `LCSC product lookup failed (HTTP ${response.status}). Set LCSC_API_KEY / LCSC_API_SECRET to use the official API instead.`,
     );
   }
 
-  let data: {
-    result?: { productList?: PublicLcscProduct[] };
-  };
+  let envelope: { code?: number; result?: PublicDetailResult | null };
   try {
-    data = (await response.json()) as {
-      result?: { productList?: PublicLcscProduct[] };
+    envelope = (await response.json()) as {
+      code?: number;
+      result?: PublicDetailResult | null;
     };
   } catch {
     throw new DistributorError(
       "lcsc",
       "bad-response",
-      "LCSC public search was blocked or returned a non-JSON page. Set LCSC_API_KEY / LCSC_API_SECRET to use the official API instead.",
+      "LCSC product lookup returned an unreadable response.",
     );
   }
 
-  const list = data?.result?.productList;
-  if (!Array.isArray(list)) {
+  if (envelope.code !== undefined && envelope.code !== 200) {
     throw new DistributorError(
       "lcsc",
       "bad-response",
-      "LCSC public search returned an unexpected shape.",
+      `LCSC product lookup failed (code ${envelope.code}).`,
     );
   }
-  return list.slice(0, limit).map(asPublicPart).filter((p) => p.productCode);
+  if (!envelope.result) return null;
+  return asPublicDetailPart(envelope.result);
 }
 
 /**
- * Search LCSC by keyword (C-code, MPN, brand, package, parameters). Uses the
- * official signed API when keys are configured, otherwise the throttled
- * public community search.
+ * Official-API keyword search. Requires credentials; used as the fallback
+ * when the public lookup fails, and for non-code keyword searches.
  */
-export async function searchLcscParts(
+async function officialSearchParts(
   keyword: string,
+  creds: LcscCredentials,
   opts?: { limit?: number; currency?: string },
 ): Promise<DistributorPart[]> {
-  const creds = getCredentials();
-  if (!creds) {
-    return publicLcscSearch(keyword, opts?.limit ?? 10);
-  }
-
   const result = (await lcscGet(
     "/rest/api/agent/product/v1/keywordsearch",
     {
@@ -444,13 +481,60 @@ export async function searchLcscParts(
 }
 
 /**
- * Fetch one part by LCSC product code. Exact C-number match wins; otherwise
- * null (the search may return only fuzzy neighbours).
+ * Search LCSC. Exact product codes go to the public detail endpoint first
+ * (official API as fallback when keys exist); other keywords need the
+ * official API credentials.
+ */
+export async function searchLcscParts(
+  keyword: string,
+  opts?: { limit?: number; currency?: string },
+): Promise<DistributorPart[]> {
+  const code = tryNormalizeCode(keyword);
+
+  if (code) {
+    const found = await fetchLcscPartByCode(code);
+    return found ? [found] : [];
+  }
+
+  const creds = getCredentials();
+  if (!creds) {
+    throw new DistributorError(
+      "lcsc",
+      "not-found",
+      "Without LCSC API keys, look up an exact product code (e.g. C25804) — keyword search needs LCSC_API_KEY / LCSC_API_SECRET.",
+    );
+  }
+  return officialSearchParts(keyword, creds, opts);
+}
+
+/**
+ * Fetch one part by LCSC product code. The public detail endpoint answers
+ * first; when it fails or has no row and API keys are configured, the
+ * official search is tried for an exact C-number match.
  */
 export async function fetchLcscPartByCode(code: string): Promise<DistributorPart | null> {
   const normalized = normalizeLcscCode(code);
-  const parts = await searchLcscParts(normalized, { limit: 10 });
-  return parts.find((p) => p.productCode.toUpperCase() === normalized) ?? null;
+
+  let publicError: unknown = null;
+  try {
+    const part = await publicLcscPartDetail(normalized);
+    if (part) return part;
+  } catch (error) {
+    publicError = error;
+  }
+
+  const creds = getCredentials();
+  if (!creds) {
+    if (publicError) throw publicError;
+    return null;
+  }
+
+  const parts = await officialSearchParts(normalized, creds, { limit: 10 });
+  const exact =
+    parts.find((p) => p.productCode.toUpperCase() === normalized) ?? null;
+  if (exact) return exact;
+  if (publicError) throw publicError;
+  return null;
 }
 
 /**
@@ -556,11 +640,11 @@ function parseRangeEnds(raw: string, unit: "V" | "A" | "C"): [number, number] | 
  */
 export function mapLcscParametersToSpecs(
   parameters: DistributorParameter[],
-): Record<string, number> {
-  const specs: Record<string, number> = {};
+): Record<string, number | string[]> {
+  const specs: Record<string, number | string[]> = {};
 
   for (const { name, value } of parameters) {
-    const key = name.trim().toLowerCase();
+    const key = name.trim().toLowerCase().replace(/\s+/g, " ");
     if (!value.trim()) continue;
 
     if (/operating temperature|temperature range/.test(key)) {
@@ -571,7 +655,11 @@ export function mapLcscParametersToSpecs(
       }
       continue;
     }
-    if (/supply voltage|operating voltage|input voltage/.test(key)) {
+    if (
+      /supply voltage|operating voltage|input voltage|voltage - supply|power supply voltage/.test(
+        key,
+      )
+    ) {
       const range = parseRangeEnds(value, "V");
       if (range) {
         specs.supplyMinV ??= range[0];
@@ -593,6 +681,16 @@ export function mapLcscParametersToSpecs(
       }
       continue;
     }
+    if (/current of transmitting|transmit(?:ting)? current|\btx current\b/.test(key)) {
+      const v = parseEngineeringValue(value, "A");
+      if (v !== null) specs.currentMaxA ??= v;
+      continue;
+    }
+    if (/receiv(?:e|ing) current|\brx current\b/.test(key)) {
+      const v = parseEngineeringValue(value, "A");
+      if (v !== null) specs.currentTypA ??= v;
+      continue;
+    }
     if (/quiescent current/.test(key)) {
       const v = parseEngineeringValue(value, "A");
       if (v !== null) specs.quiescentCurrentA ??= v;
@@ -601,8 +699,43 @@ export function mapLcscParametersToSpecs(
     if (/shutdown current|standby current|sleep current/.test(key)) {
       const v = parseEngineeringValue(value, "A");
       if (v !== null) specs.sleepCurrentA ??= v;
+      continue;
+    }
+    // Interface lists use ";" separators on LCSC ("SPI;UART;I2C"). The scorer
+    // matches list entries exactly, so store clean lowercase tokens.
+    if (/^(interface|interfaces)$/.test(key)) {
+      const tokens = [
+        ...new Set(
+          value
+            .split(/[,;|\n]/)
+            .map((item) => item.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      ];
+      if (tokens.length > 0) specs.interfaces ??= tokens;
+      continue;
+    }
+    if (/wireless|bluetooth|^wifi$|zigbee|\blora\b/.test(key)) {
+      const tokens = [
+        ...new Set(
+          value
+            .split(/[,;|\n]/)
+            .map(normalizeWirelessToken)
+            .filter((t): t is string => t !== null),
+        ),
+      ];
+      if (tokens.length > 0) specs.wireless ??= tokens;
     }
   }
 
   return specs;
+}
+
+/** Collapse "Bluetooth5.0" → "bluetooth" so scorer list-matches hit. */
+function normalizeWirelessToken(raw: string): string | null {
+  const token = raw.trim().toLowerCase();
+  if (!token) return null;
+  if (token.includes("bluetooth")) return "bluetooth";
+  if (token.includes("wifi") || token.includes("wlan")) return "wifi";
+  return token;
 }
