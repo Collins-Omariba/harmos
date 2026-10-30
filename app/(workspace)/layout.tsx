@@ -2,11 +2,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
-import {
-  isAuthEnabled,
-  SESSION_COOKIE,
-  verifySessionToken,
-} from "@/lib/auth/session";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
+import { getUserById } from "@/lib/auth/users";
 import { listProjectSummaries } from "@/lib/projects";
 
 export const dynamic = "force-dynamic";
@@ -16,24 +13,20 @@ export default async function WorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const authEnabled = isAuthEnabled();
-  if (authEnabled) {
-    const cookieStore = await cookies();
-    if (
-      !verifySessionToken(
-        cookieStore.get(SESSION_COOKIE)?.value,
-        process.env.HARMOS_WORKSPACE_PASSWORD,
-      )
-    ) {
-      redirect("/login");
-    }
+  const cookieStore = await cookies();
+  const sessionUserId = verifySessionToken(
+    cookieStore.get(SESSION_COOKIE)?.value,
+  );
+  const user = sessionUserId ? await getUserById(sessionUserId) : null;
+  if (!user) {
+    redirect("/login");
   }
 
   const projects = await listProjectSummaries();
 
   return (
     <AppShell
-      authEnabled={authEnabled}
+      userEmail={user.email}
       projects={projects.map(({ id, name, status }) => ({
         id,
         name,

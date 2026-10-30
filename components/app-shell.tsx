@@ -76,8 +76,23 @@ function Sidebar({ projects }: { projects: ProjectNavItem[] }) {
         <ProjectNavList projects={projects} />
         <LibraryNav />
       </ScrollArea>
-      <div className="shrink-0 border-t border-border p-3">
+      <div className="shrink-0 space-y-3 border-t border-border p-3">
         <NewProjectButton className="w-full" />
+        <p className="numeric text-center text-[10px] text-muted-foreground">
+          <Link
+            href="/terms"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Terms
+          </Link>
+          {" · "}
+          <Link
+            href="/privacy"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Privacy
+          </Link>
+        </p>
       </div>
     </aside>
   );
@@ -86,11 +101,11 @@ function Sidebar({ projects }: { projects: ProjectNavItem[] }) {
 export function AppShell({
   projects,
   children,
-  authEnabled = false,
+  userEmail,
 }: {
   projects: ProjectNavItem[];
   children: React.ReactNode;
-  authEnabled?: boolean;
+  userEmail: string;
 }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
@@ -108,13 +123,17 @@ export function AppShell({
           Engineering workspace
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {authEnabled ? (
-            <form action={logoutAction}>
-              <Button type="submit" variant="ghost" size="sm">
-                Log out
-              </Button>
-            </form>
-          ) : null}
+          <span
+            className="numeric mr-1 hidden max-w-44 truncate text-[10px] text-muted-foreground lg:inline"
+            title={userEmail}
+          >
+            {userEmail}
+          </span>
+          <form action={logoutAction}>
+            <Button type="submit" variant="ghost" size="sm">
+              Log out
+            </Button>
+          </form>
           <ThemeToggle />
         </div>
       </header>

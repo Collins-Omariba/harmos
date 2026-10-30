@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { LockKeyhole } from "lucide-react";
 
@@ -17,13 +18,29 @@ export function LoginForm() {
           <LockKeyhole className="size-5 text-primary" />
         </div>
         <h1 className="mt-5 text-xl font-semibold text-foreground">
-          Workspace locked
+          Log in to Harmos
         </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Enter the local workspace password to continue.
+          Your workspace, parts, and files live on this machine — log in to
+          pick up where you left off.
         </p>
 
         <form action={formAction} className="mt-5 space-y-4">
+          <label className="block space-y-1.5">
+            <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              Email
+            </span>
+            <input
+              name="email"
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              placeholder="you@example.com"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            />
+          </label>
+
           <label className="block space-y-1.5">
             <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
               Password
@@ -32,7 +49,6 @@ export function LoginForm() {
               name="password"
               type="password"
               required
-              autoFocus
               autoComplete="current-password"
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             />
@@ -45,9 +61,25 @@ export function LoginForm() {
           ) : null}
 
           <Button type="submit" className="w-full" disabled={pending}>
-            {pending ? "Checking..." : "Unlock workspace"}
+            {pending ? "Checking..." : "Log in"}
           </Button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          No account yet?{" "}
+          <Link href="/signup" className="text-primary underline-offset-4 hover:underline">
+            Create one
+          </Link>
+        </p>
+        <p className="numeric mt-2 text-center text-[10px] text-muted-foreground">
+          <Link href="/terms" className="underline-offset-4 hover:underline">
+            Terms
+          </Link>
+          {" · "}
+          <Link href="/privacy" className="underline-offset-4 hover:underline">
+            Privacy
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );

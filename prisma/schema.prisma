@@ -1,6 +1,6 @@
 // Harmos data model
-// SQLite via Prisma. Every record except Project and CatalogPart belongs to a
-// Project.
+// SQLite via Prisma. Every record except Project, CatalogPart, and User
+// belongs to a Project.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,6 +9,15 @@ generator client {
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+/// Local account. Passwords are stored as scrypt hashes, never plaintext.
+/// The first account is created through /signup; login is always required.
+model User {
+  id           String   @id
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
 }
 
 model Project {
