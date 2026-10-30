@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { LcscImportDialog } from "@/components/lcsc-import";
 import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import { isSourceStale, sourceAgeLabel } from "@/lib/catalog/staleness";
 import { cn } from "@/lib/utils";
@@ -242,7 +243,8 @@ export function CatalogManager({ parts }: { parts: CatalogPart[] }) {
           {counts.seeded ?? 0} seeded · {counts.imported ?? 0} imported ·{" "}
           {counts.custom ?? 0} custom
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <LcscImportDialog />
           <RecordDialog
             title="Add catalog part"
             description="Custom rows are yours: the seed only fills gaps and never overwrites."
