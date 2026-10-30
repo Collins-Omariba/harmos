@@ -11,11 +11,13 @@ import { EmptyState } from "@/components/empty-state";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDate, padCount } from "@/lib/format";
 import { listProjectSummaries } from "@/lib/projects";
+import { requireSessionUser } from "@/lib/auth/users";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage() {
-  const projects = await listProjectSummaries();
+  const user = await requireSessionUser();
+  const projects = await listProjectSummaries(user.id);
   const activeCount = projects.filter(
     (project) => project.status === "active",
   ).length;

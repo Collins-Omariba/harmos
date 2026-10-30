@@ -13,6 +13,7 @@ import { defaultCandidateIds, runComparison } from "@/lib/comparison/run";
 import { scoreCandidates } from "@/lib/comparison/scorer";
 import { suggestConstraints as suggestFromRules } from "@/lib/comparison/suggest";
 import type { ComparisonConstraint } from "@/lib/comparison/types";
+import { requireSessionUser } from "@/lib/auth/users";
 import { prisma } from "@/lib/db";
 
 const newProjectSchema = z.object({
@@ -149,6 +150,7 @@ export async function createProjectWithPacksAction(input: {
   }
 
   const projectId = `proj-${crypto.randomUUID()}`;
+  const sessionUser = await requireSessionUser();
 
   try {
     await prisma.project.create({
@@ -157,6 +159,7 @@ export async function createProjectWithPacksAction(input: {
         name: parsed.data.name,
         brief: parsed.data.brief,
         status: "draft",
+        ownerId: sessionUser.id,
         requirements: { create: assembled.requirements },
         comparisonConstraints: {
           create: assembled.constraints.map((constraint, index) => ({

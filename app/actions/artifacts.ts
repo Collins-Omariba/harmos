@@ -10,6 +10,7 @@ import {
   saveArtifactFile,
   sha256Hex,
 } from "@/lib/artifacts/storage";
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { firmwareMetaSchema } from "@/lib/firmware/meta";
 import { prisma } from "@/lib/db";
 
@@ -43,6 +44,19 @@ export async function uploadArtifactAction(
   _previous: ArtifactUploadState,
   formData: FormData,
 ): Promise<ArtifactUploadState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return {
+        ok: false,
+        message: "You don't have access to this project.",
+      };
+    }
+  }
   const parsed = uploadSchema.safeParse({
     projectId: formData.get("projectId"),
     kind: formData.get("kind"),

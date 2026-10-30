@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { runComparison } from "@/lib/comparison/run";
 
 const runComparisonSchema = z.object({
@@ -23,6 +24,13 @@ export async function runComparisonAction(
   _previous: ComparisonActionState,
   formData: FormData,
 ): Promise<ComparisonActionState> {
+  const sessionUser = await requireSessionUser();
+  if (!(await requireProjectAccess(sessionUser.id, projectId))) {
+    return {
+      ok: false,
+      message: "You don't have access to this project.",
+    };
+  }
   const parsed = runComparisonSchema.safeParse({
     category: formData.get("category"),
     catalogPartIds: formData.getAll("catalogPartIds"),

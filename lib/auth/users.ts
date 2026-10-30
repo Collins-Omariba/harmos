@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 
 export function normalizeEmail(raw: string): string {
@@ -81,4 +85,39 @@ export async function getUserById(
     where: { id },
     select: { id: true, email: true },
   });
+}
+
+/**
+ * Resolve the signed-in user or bounce to /login. Every project-scoped
+ * server action and page starts here.
+ */
+export async function requireSessionUser(): Promise<{
+  id: string;
+  email: string;
+}> {
+  const cookieStore = await cookies();
+  const sessionUserId = verifySessionToken(
+    cookieStore.get(SESSION_COOKIE)?.value,
+  );
+  const user = sessionUserId ? await getUserById(sessionUserId) : null;
+  if (!user) {
+    redirect("/login");
+  }
+  return user;
+}
+
+/**
+ * A user may read or mutate a project they own, or a shared (ownerless)
+ * project such as the seed demo. Returns true when allowed.
+ */
+export async function requireProjectAccess(
+  userId: string,
+  projectId: string,
+): Promise<boolean> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+  if (!project) return false;
+  return project.ownerId === null || project.ownerId === userId;
 }

@@ -1,9 +1,5 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-
 import { AppShell } from "@/components/app-shell";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/session";
-import { getUserById } from "@/lib/auth/users";
+import { requireSessionUser } from "@/lib/auth/users";
 import { listProjectSummaries } from "@/lib/projects";
 
 export const dynamic = "force-dynamic";
@@ -13,16 +9,8 @@ export default async function WorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const sessionUserId = verifySessionToken(
-    cookieStore.get(SESSION_COOKIE)?.value,
-  );
-  const user = sessionUserId ? await getUserById(sessionUserId) : null;
-  if (!user) {
-    redirect("/login");
-  }
-
-  const projects = await listProjectSummaries();
+  const user = await requireSessionUser();
+  const projects = await listProjectSummaries(user.id);
 
   return (
     <AppShell

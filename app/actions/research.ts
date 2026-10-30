@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { selectResources } from "@/lib/ai/tasks/select_resources";
 import { selectTopResources } from "@/lib/research/heuristic";
 import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
@@ -38,6 +39,16 @@ export async function createResourceAction(
   _previous: ResearchActionState,
   formData: FormData,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = resourceSchema.safeParse({
     projectId: formData.get("projectId"),
     title: formData.get("title"),
@@ -76,6 +87,16 @@ export async function updateResourceAction(
   _previous: ResearchActionState,
   formData: FormData,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const recordId = String(formData.get("recordId") ?? "");
   const parsed = resourceSchema.safeParse({
     projectId: formData.get("projectId"),
@@ -119,6 +140,16 @@ export async function deleteResourceAction(
   _previous: ResearchActionState,
   formData: FormData,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -152,6 +183,16 @@ export async function setResourceSelectionAction(
   _previous: ResearchActionState,
   formData: FormData,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
   const selected = formData.get("selected") === "1";
@@ -188,6 +229,16 @@ export async function importCatalogResourcesAction(
   _previous: ResearchActionState,
   formData: FormData,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = importSchema.safeParse({
     projectId: formData.get("projectId"),
     catalogPartIds: formData.getAll("catalogPartIds"),
@@ -257,6 +308,10 @@ export async function importCatalogResourcesAction(
 export async function runResourceSelectionAction(
   projectId: string,
 ): Promise<ResearchActionState> {
+  const sessionUser = await requireSessionUser();
+  if (!(await requireProjectAccess(sessionUser.id, projectId))) {
+    return fail("You don't have access to this project.");
+  }
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {

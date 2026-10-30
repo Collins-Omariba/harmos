@@ -16,8 +16,19 @@ export type ProjectSummary = ProjectNavItem & {
   };
 };
 
-export async function listProjectSummaries(): Promise<ProjectSummary[]> {
+/**
+ * Projects a user may see: their own plus shared (ownerless) rows such as
+ * the seed demo. Never returns another user's projects.
+ */
+export function accessibleProjectFilter(userId: string) {
+  return { OR: [{ ownerId: userId }, { ownerId: null }] };
+}
+
+export async function listProjectSummaries(
+  userId: string,
+): Promise<ProjectSummary[]> {
   const projects = await prisma.project.findMany({
+    where: accessibleProjectFilter(userId),
     orderBy: { updatedAt: "desc" },
     include: {
       _count: {

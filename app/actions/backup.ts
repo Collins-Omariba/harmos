@@ -9,6 +9,11 @@ import {
   buildProjectImportPlan,
   type ProjectExport,
 } from "@/lib/backup/project-transfer";
+import {
+  requireProjectAccess,
+  requireSessionUser,
+} from "@/lib/auth/users";
+import { accessibleProjectFilter } from "@/lib/projects";
 import { prisma } from "@/lib/db";
 
 export type BackupActionState = {
@@ -78,6 +83,10 @@ async function projectExportData(projectId: string): Promise<ProjectExport | nul
 export async function exportProjectAction(
   projectId: string,
 ): Promise<ExportResult> {
+  const sessionUser = await requireSessionUser();
+  if (!(await requireProjectAccess(sessionUser.id, projectId))) {
+    return { ok: false, message: "You don't have access to this project." };
+  }
   const data = await projectExportData(projectId);
   if (!data) {
     return { ok: false, message: "Project not found." };
@@ -91,7 +100,11 @@ export async function exportProjectAction(
 }
 
 export async function exportWorkspaceAction(): Promise<ExportResult> {
-  const projects = await prisma.project.findMany({ select: { id: true } });
+  const sessionUser = await requireSessionUser();
+  const projects = await prisma.project.findMany({
+    where: accessibleProjectFilter(sessionUser.id),
+    select: { id: true },
+  });
   const exports = [];
   for (const project of projects) {
     const data = await projectExportData(project.id);
@@ -125,6 +138,7 @@ export async function importProjectAction(
   _previous: BackupActionState,
   formData: FormData,
 ): Promise<BackupActionState> {
+  const sessionUser = await requireSessionUser();
   const raw = String(formData.get("projectJson") ?? "");
 
   let parsed: unknown;
@@ -150,7 +164,9 @@ export async function importProjectAction(
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.project.create({ data: plan.project });
+      await tx.project.create({
+        data: { ...plan.project, ownerId: sessionUser.id },
+      });
       if (plan.requirements.length) {
         await tx.requirement.createMany({ data: plan.requirements as never[] });
       }

@@ -4,6 +4,8 @@ import { Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { catalog } from "@/lib/catalog";
 import { prisma } from "@/lib/db";
+import { requireSessionUser } from "@/lib/auth/users";
+import { accessibleProjectFilter } from "@/lib/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +31,11 @@ export default async function SearchPage({
   const { q } = await searchParams;
   const query = (q ?? "").trim();
   const needle = query.toLowerCase();
+  const user = await requireSessionUser();
 
   const projects = query
     ? await prisma.project.findMany({
+        where: accessibleProjectFilter(user.id),
         orderBy: { updatedAt: "desc" },
         include: {
           requirements: true,

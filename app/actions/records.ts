@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { dollarsToCents } from "@/lib/bom/totals";
 import { catalogToComponentInput } from "@/lib/bom/fromCatalog";
 import { catalog } from "@/lib/catalog";
@@ -52,6 +53,16 @@ export async function updateProjectAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = projectSchema.safeParse({
     projectId: formData.get("projectId"),
     name: formData.get("name"),
@@ -79,6 +90,16 @@ export async function deleteProjectAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = idSchema.parse(formData.get("projectId"));
   const deleted = await prisma.project.deleteMany({
     where: { id: projectId },
@@ -107,6 +128,16 @@ export async function createRequirementAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = requirementSchema.safeParse({
     projectId: formData.get("projectId"),
     text: formData.get("text"),
@@ -127,6 +158,16 @@ export async function updateRequirementAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = requirementSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -161,6 +202,16 @@ export async function deleteRequirementAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -194,6 +245,16 @@ export async function createConstraintAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = constraintSchema.safeParse({
     projectId: formData.get("projectId"),
     label: formData.get("label"),
@@ -249,6 +310,16 @@ export async function updateConstraintAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = constraintSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -305,6 +376,16 @@ export async function deleteConstraintAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -347,6 +428,16 @@ export async function createComponentAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = componentSchema.safeParse({
     projectId: formData.get("projectId"),
     partNumber: formData.get("partNumber"),
@@ -388,6 +479,16 @@ export async function updateComponentAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = componentSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -436,6 +537,16 @@ export async function deleteComponentAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -454,6 +565,16 @@ export async function addCatalogComponentsAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const partIds = formData
     .getAll("catalogPartIds")
@@ -625,6 +746,16 @@ export async function createArtifactAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = artifactSchema.safeParse({
     projectId: formData.get("projectId"),
     kind: formData.get("kind"),
@@ -666,6 +797,16 @@ export async function updateArtifactAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = artifactSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -713,6 +854,16 @@ export async function deleteArtifactAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -737,6 +888,16 @@ export async function setCurrentArtifactAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -785,6 +946,16 @@ export async function createDecisionAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = decisionSchema.safeParse({
     projectId: formData.get("projectId"),
     title: formData.get("title"),
@@ -818,6 +989,16 @@ export async function updateDecisionAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = decisionSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -858,6 +1039,16 @@ export async function deleteDecisionAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
@@ -887,6 +1078,16 @@ export async function createValidationTestAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = validationTestSchema.safeParse({
     projectId: formData.get("projectId"),
     name: formData.get("name"),
@@ -914,6 +1115,16 @@ export async function updateValidationTestAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = validationTestSchema
     .extend({ recordId: idSchema })
     .safeParse({
@@ -948,6 +1159,16 @@ export async function deleteValidationTestAction(
   _previous: RecordActionState,
   formData: FormData,
 ): Promise<RecordActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 

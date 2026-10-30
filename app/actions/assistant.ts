@@ -10,9 +10,20 @@ import { routeQuestion } from "@/lib/assistant/router";
 import { decodeConstraintValue } from "@/lib/comparison/constraints";
 import { catalog } from "@/lib/catalog";
 import { searchCatalog } from "@/lib/catalog/intelligence";
+import { accessibleProjectFilter } from "@/lib/projects";
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { prisma } from "@/lib/db";
 
 export type AskResult = AssistantAnswer;
+
+function noAccess(): AskResult {
+  return {
+    text: "I don't have access to that project. Pick one of yours from the project index.",
+    citations: [],
+    followUps: [],
+    source: "computed",
+  };
+}
 
 export async function askAssistantAction(input: {
   projectId: string | null;
@@ -29,8 +40,14 @@ export async function askAssistantAction(input: {
     };
   }
 
+  const sessionUser = await requireSessionUser();
+
   if (!input.projectId) {
-    return answerAcrossProjects(question);
+    return answerAcrossProjects(sessionUser.id, question);
+  }
+
+  if (!(await requireProjectAccess(sessionUser.id, input.projectId))) {
+    return noAccess();
   }
 
   const project = await prisma.project.findUnique({
@@ -138,8 +155,12 @@ export async function askAssistantAction(input: {
   return answerLoadedQuestion(snapshot, question, knownTerms);
 }
 
-async function answerAcrossProjects(question: string): Promise<AskResult> {
+async function answerAcrossProjects(
+  userId: string,
+  question: string,
+): Promise<AskResult> {
   const projects = await prisma.project.findMany({
+    where: accessibleProjectFilter(userId),
     orderBy: { updatedAt: "desc" },
     include: {
       _count: {

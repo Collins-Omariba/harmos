@@ -18,6 +18,8 @@ model User {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+
+  projects Project[]
 }
 
 model Project {
@@ -39,6 +41,13 @@ model Project {
   edges                 Edge[]
   decisions             Decision[]
   validationTests       ValidationTest[]
+
+  /// Owner account. Null = shared (seed demo, legacy rows): visible to all
+  /// signed-in users. Set on creation for everything new.
+  ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
+  @@index([ownerId])
 }
 
 /// A global, locally seeded component catalog. Unlike project data, catalog

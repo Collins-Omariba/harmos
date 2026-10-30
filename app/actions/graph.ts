@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { explainChangeImpact } from "@/lib/ai/tasks/explain_change_impact";
 import { catalogToComponentInput } from "@/lib/bom/fromCatalog";
 import { catalog } from "@/lib/catalog";
@@ -86,6 +87,16 @@ export async function createArtifactEdgeAction(
   _previous: GraphActionState,
   formData: FormData,
 ): Promise<GraphActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = artifactEdgeSchema.safeParse({
     projectId: formData.get("projectId"),
     fromArtifactId: formData.get("fromArtifactId"),
@@ -130,6 +141,16 @@ export async function deleteArtifactEdgeAction(
   _previous: GraphActionState,
   formData: FormData,
 ): Promise<GraphActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
   const deleted = await prisma.edge.deleteMany({
@@ -145,6 +166,16 @@ export async function createComponentLinkAction(
   _previous: GraphActionState,
   formData: FormData,
 ): Promise<GraphActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const parsed = componentLinkSchema.safeParse({
     projectId: formData.get("projectId"),
     componentId: formData.get("componentId"),
@@ -188,6 +219,16 @@ export async function deleteComponentLinkAction(
   _previous: GraphActionState,
   formData: FormData,
 ): Promise<GraphActionState> {
+  const sessionUser = await requireSessionUser();
+  {
+    const scopedProjectId = String(formData.get("projectId") ?? "");
+    if (
+      scopedProjectId &&
+      !(await requireProjectAccess(sessionUser.id, scopedProjectId))
+    ) {
+      return fail("You don't have access to this project.");
+    }
+  }
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
   const deleted = await prisma.componentArtifactLink.deleteMany({
@@ -249,6 +290,10 @@ export async function previewComponentSwapAction(input: {
   componentId: string;
   catalogPartId: string;
 }): Promise<ImpactPreviewResult> {
+  const sessionUser = await requireSessionUser();
+  if (!(await requireProjectAccess(sessionUser.id, input.projectId))) {
+    return { ok: false, message: "You don't have access to this project." };
+  }
   const parsed = swapSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, message: "Choose a component and a replacement part." };
@@ -347,6 +392,10 @@ export async function applyComponentSwapAction(input: {
   componentId: string;
   catalogPartId: string;
 }): Promise<GraphActionState> {
+  const sessionUser = await requireSessionUser();
+  if (!(await requireProjectAccess(sessionUser.id, input.projectId))) {
+    return fail("You don't have access to this project.");
+  }
   const parsed = swapSchema.safeParse(input);
   if (!parsed.success) {
     return fail("Choose a component and a replacement part.");

@@ -28,6 +28,7 @@ import { toDomainConstraint } from "@/lib/comparison/constraints";
 import { prisma } from "@/lib/db";
 import { loadProjectGraph } from "@/lib/graph/project-graph";
 import { formatDate, padCount } from "@/lib/format";
+import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export default async function ProjectPage({
 }) {
   const { id } = await params;
   const { tab } = await searchParams;
+
+  const user = await requireSessionUser();
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -61,6 +64,9 @@ export default async function ProjectPage({
   });
 
   if (!project) {
+    notFound();
+  }
+  if (!(await requireProjectAccess(user.id, project.id))) {
     notFound();
   }
 
