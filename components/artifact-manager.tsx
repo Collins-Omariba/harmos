@@ -21,9 +21,13 @@ import {
   HiddenFields,
   NativeSelect,
   RecordDialog,
-  TextArea,
   TextInput,
 } from "@/components/record-dialog";
+import {
+  metaObjectFromRows,
+  metaRowsFromJson,
+  type ArtifactMetaRow,
+} from "@/lib/artifacts/meta";
 
 type Artifact = {
   id: string;
@@ -82,6 +86,108 @@ function defaultFirmware(artifact?: Artifact) {
     hwName: parsed.meta.targetHardware?.name ?? "",
     hwVersion: parsed.meta.targetHardware?.version ?? "",
   };
+}
+
+const META_SUGGESTIONS: Record<string, string[]> = {
+  schematic: ["tool", "layers", "sheets"],
+  pcb: ["tool", "layers", "finish"],
+  datasheet: ["pages", "revision", "source"],
+  bom: ["tool", "lines"],
+  test: ["rig", "result"],
+  decision: ["status", "reviewer"],
+  doc: ["pages", "source"],
+};
+
+function MetaFields({ artifact, kind }: { artifact?: Artifact; kind: string }) {
+  const [rows, setRows] = useState<ArtifactMetaRow[]>(() =>
+    metaRowsFromJson(artifact?.metaJson),
+  );
+  const id = artifact ? `artifact-${artifact.id}` : "artifact-new";
+
+  function setRow(index: number, patch: Partial<ArtifactMetaRow>) {
+    setRows((current) =>
+      current.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function addRow(prefill = "") {
+    setRows((current) => [...current, { key: prefill, value: "" }]);
+  }
+
+  function removeRow(index: number) {
+    setRows((current) =>
+      current.length <= 1
+        ? [{ key: "", value: "" }]
+        : current.filter((_, i) => i !== index),
+    );
+  }
+
+  const suggestions = (META_SUGGESTIONS[kind] ?? []).filter(
+    (key) => !rows.some((row) => row.key.trim() === key),
+  );
+
+  return (
+    <div className="space-y-1.5">
+      <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        Details
+      </span>
+      <div className="space-y-2">
+        {rows.map((row, index) => (
+          <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
+            <TextInput
+              aria-label={`Detail name ${index + 1}`}
+              value={row.key}
+              onChange={(event) => setRow(index, { key: event.target.value })}
+              placeholder="name — e.g. tool"
+              autoComplete="off"
+            />
+            <TextInput
+              aria-label={`Detail value ${index + 1}`}
+              value={row.value}
+              onChange={(event) => setRow(index, { value: event.target.value })}
+              placeholder="value — e.g. KiCad 9"
+              autoComplete="off"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-9 text-muted-foreground hover:text-destructive"
+              onClick={() => removeRow(index)}
+              aria-label={`Remove detail ${index + 1}`}
+            >
+              ×
+            </Button>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => addRow()}>
+          + Add detail
+        </Button>
+        {suggestions.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => addRow(key)}
+            className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          >
+            + {key}
+          </button>
+        ))}
+      </div>
+      <input
+        type="hidden"
+        id={`${id}-meta`}
+        name="metaJson"
+        value={JSON.stringify(metaObjectFromRows(rows))}
+      />
+      <p className="text-[11px] leading-relaxed text-muted-foreground">
+        Plain name/value details — numbers are stored as numbers. Firmware
+        uses its own structured fields instead.
+      </p>
+    </div>
+  );
 }
 
 function ArtifactFields({
@@ -215,16 +321,7 @@ function ArtifactFields({
           </p>
         </>
       ) : (
-        <Field label="Metadata (JSON)" htmlFor={`${id}-meta`}>
-          <TextArea
-            id={`${id}-meta`}
-            name="metaJson"
-            required
-            rows={3}
-            defaultValue={artifact?.metaJson ?? "{}"}
-            placeholder='{"tool": "KiCad 9"}'
-          />
-        </Field>
+        <MetaFields artifact={artifact} kind={kind} />
       )}
     </>
   );

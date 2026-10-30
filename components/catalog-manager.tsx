@@ -20,6 +20,7 @@ import {
 import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import { isSourceStale, sourceAgeLabel } from "@/lib/catalog/staleness";
 import { cn } from "@/lib/utils";
+import { SpecFields } from "@/components/catalog-spec-fields";
 import {
   AddButton,
   DeleteButton,
@@ -49,6 +50,7 @@ const ORIGIN_STYLES: Record<string, string> = {
 
 function PartFields({ part }: { part?: CatalogPart }) {
   const id = part ? `catalog-${part.id}` : "catalog-new";
+  const [category, setCategory] = useState<string>(part?.category ?? "level-sensor");
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
@@ -76,7 +78,8 @@ function PartFields({ part }: { part?: CatalogPart }) {
           <NativeSelect
             id={`${id}-cat`}
             name="category"
-            defaultValue={part?.category ?? "level-sensor"}
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
           >
             {CATALOG_CATEGORIES.map((category) => (
               <option key={category.key} value={category.key}>
@@ -159,30 +162,22 @@ function PartFields({ part }: { part?: CatalogPart }) {
           />
         </Field>
       </div>
-      <Field label="Specs (JSON — keys must be known metrics)" htmlFor={`${id}-specs`}>
-        <TextArea
+      <div className="space-y-1.5">
+        <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Specs — leave unknown fields empty
+        </span>
+        <SpecFields
           id={`${id}-specs`}
-          name="specsJson"
-          required
-          rows={5}
-          defaultValue={
+          category={category}
+          specs={
             part
-              ? JSON.stringify(
-                  Object.fromEntries(
-                    Object.entries(part.specs).filter(([key]) => key !== "priceUsd"),
-                  ),
-                  null,
-                  2,
+              ? Object.fromEntries(
+                  Object.entries(part.specs).filter(([key]) => key !== "priceUsd"),
                 )
-              : '{\n  "supplyMinV": 3.0,\n  "supplyMaxV": 5.5,\n  "interfaces": ["i2c"]\n}'
+              : undefined
           }
-          placeholder='{"supplyMinV": 3.0, "interfaces": ["i2c"]}'
         />
-      </Field>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Spec keys must match the scorer&apos;s metric list — unknown keys are
-        rejected so a typo can never score as &ldquo;not specified&rdquo;.
-      </p>
+      </div>
     </>
   );
 }

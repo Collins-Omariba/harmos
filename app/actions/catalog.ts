@@ -6,7 +6,11 @@ import { z } from "zod";
 import { suggestCatalogParts } from "@/lib/ai/tasks/suggest_catalog_parts";
 import { validateProposalCandidate } from "@/lib/catalog/proposals";
 import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
-import { splitTags, validateSpecsObject } from "@/lib/catalog/specs";
+import {
+  specsFromFormEntries,
+  splitTags,
+  validateSpecsObject,
+} from "@/lib/catalog/specs";
 import {
   CATALOG_CATEGORY_KEYS,
   isCatalogCategory,
@@ -50,7 +54,6 @@ const catalogSchema = z.object({
   sourceRetrievedAt: z.string().min(1, "Retrieval date is required."),
   priceUsd: z.string().trim(),
   tags: z.string().trim(),
-  specsJson: z.string().trim().min(1, "Specs are required."),
 });
 
 function parsePrice(raw: string): { price: number | null } | { error: string } {
@@ -94,7 +97,6 @@ function parsePartForm(formData: FormData): ParsedPart {
     sourceRetrievedAt: formData.get("sourceRetrievedAt"),
     priceUsd: formData.get("priceUsd") ?? "",
     tags: formData.get("tags") ?? "",
-    specsJson: formData.get("specsJson"),
   });
 
   if (!parsed.success) {
@@ -117,11 +119,20 @@ function parsePartForm(formData: FormData): ParsedPart {
     return price;
   }
 
-  let specsValue: unknown;
-  try {
-    specsValue = JSON.parse(data.specsJson);
-  } catch {
-    return { error: "Specs must be valid JSON." };
+  // Structured spec inputs (`spec_<metric>` fields) replace the old raw-JSON
+  // textarea. Unknown metrics can never be submitted; empty fields are
+  // omitted before validation.
+  const specsValue = specsFromFormEntries((name) => {
+    const value = formData.get(name);
+    return typeof value === "string" ? value : null;
+  });
+
+  if (
+    !specsValue ||
+    typeof specsValue !== "object" ||
+    Object.keys(specsValue).length === 0
+  ) {
+    return { error: "Add at least one spec — empty specs cannot be scored." };
   }
 
   const specs = validateSpecsObject(specsValue);
