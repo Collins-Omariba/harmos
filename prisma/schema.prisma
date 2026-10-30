@@ -22,6 +22,7 @@ model Project {
   requirements          Requirement[]
   resources             Resource[]
   components            Component[]
+  componentLinks        ComponentArtifactLink[]
   comparisonConstraints ComparisonConstraint[]
   comparisonRuns        ComparisonRun[]
   comparisonCandidates  ComparisonCandidate[]
@@ -59,13 +60,13 @@ model CatalogPart {
 /// the catalog yet: approving validates once more and creates the CatalogPart
 /// (origin "agent"); rejecting deletes the row.
 model CatalogProposal {
-  id           String   @id @default(cuid())
-  status       String   @default("pending")
-  source       String   @default("ai")
-  request      String
-  payloadJson  String
-  note         String   @default("")
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  status      String   @default("pending")
+  source      String   @default("ai")
+  request     String
+  payloadJson String
+  note        String   @default("")
+  createdAt   DateTime @default(now())
 
   @@index([status])
 }
@@ -140,19 +141,39 @@ model Resource {
 }
 
 model Component {
-  id            String @id @default(cuid())
-  projectId     String
-  partNumber    String
-  manufacturer  String
-  package       String
-  datasheetUrl  String?
-  notes         String?
-  quantity      Int    @default(1)
+  id             String  @id @default(cuid())
+  projectId      String
+  partNumber     String
+  manufacturer   String
+  package        String
+  datasheetUrl   String?
+  notes          String?
+  quantity       Int     @default(1)
   unitPriceCents Int?
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project       Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  artifactLinks ComponentArtifactLink[]
 
   @@index([projectId])
+}
+
+/// An explicit dependency from a selected component to an artifact it feeds.
+/// Component swaps traverse these links first, then artifact-to-artifact edges.
+model ComponentArtifactLink {
+  id          String @id @default(cuid())
+  projectId   String
+  componentId String
+  artifactId  String
+  kind        String
+
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  component Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  artifact  Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, artifactId, kind])
+  @@index([projectId])
+  @@index([componentId])
+  @@index([artifactId])
 }
 
 model ComparisonCandidate {
@@ -191,9 +212,10 @@ model Artifact {
   /// per family; enforced in the set-current action, not the database.
   current Boolean @default(false)
 
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  edgesFrom Edge[]  @relation("EdgeFrom")
-  edgesTo   Edge[]  @relation("EdgeTo")
+  project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  edgesFrom      Edge[]                  @relation("EdgeFrom")
+  edgesTo        Edge[]                  @relation("EdgeTo")
+  componentLinks ComponentArtifactLink[]
 
   @@index([projectId])
 }

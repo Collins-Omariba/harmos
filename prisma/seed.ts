@@ -20,6 +20,33 @@ const DEMO_CANDIDATES = [
   "cat-milone-etape",
 ];
 
+const DEMO_COMPONENT_LINKS = [
+  { componentId: "comp-esp32", artifactId: "artifact-schematic", kind: "feeds" },
+  { componentId: "comp-esp32", artifactId: "artifact-firmware", kind: "controls" },
+  { componentId: "comp-ultrasonic", artifactId: "artifact-schematic", kind: "feeds" },
+  { componentId: "comp-ultrasonic", artifactId: "artifact-datasheet", kind: "documents" },
+  { componentId: "comp-regulator", artifactId: "artifact-schematic", kind: "powers" },
+  { componentId: "comp-battery", artifactId: "artifact-schematic", kind: "powers" },
+];
+
+async function ensureDemoComponentLinks() {
+  for (const link of DEMO_COMPONENT_LINKS) {
+    const existing = await prisma.componentArtifactLink.findFirst({
+      where: {
+        projectId: PROJECT_ID,
+        componentId: link.componentId,
+        artifactId: link.artifactId,
+        kind: link.kind,
+      },
+    });
+    if (!existing) {
+      await prisma.componentArtifactLink.create({
+        data: { projectId: PROJECT_ID, ...link },
+      });
+    }
+  }
+}
+
 async function main() {
   // Idempotent by design: the seed fills gaps but never deletes user data.
   // Missing catalog rows are added (existing ids are left untouched); the
@@ -59,6 +86,7 @@ async function main() {
   });
 
   if (existing) {
+    await ensureDemoComponentLinks();
     console.log(
       `Catalog up to date (${missingParts.length} new rows). Demo project already exists; leaving user data untouched.`,
     );
@@ -244,6 +272,9 @@ async function main() {
             kind: "documents",
           },
         ],
+      },
+      componentLinks: {
+        create: DEMO_COMPONENT_LINKS,
       },
       decisions: {
         create: [

@@ -3,16 +3,15 @@ import { notFound } from "next/navigation";
 import {
   ArrowRight,
   FlaskConical,
-  Network,
 } from "lucide-react";
 
 import { deleteProjectAction } from "@/app/actions/records";
 import { ArtifactManager } from "@/components/artifact-manager";
 import { AssistantFab } from "@/components/assistant-fab";
+import { ChangeImpact } from "@/components/change-impact";
 import { ComparisonTab } from "@/components/comparison-tab";
 import { ComponentManager } from "@/components/component-manager";
 import { DecisionManager } from "@/components/decision-manager";
-import { EmptyState } from "@/components/empty-state";
 import { ProjectEditor } from "@/components/project-editor";
 import { RequirementManager } from "@/components/requirement-manager";
 import { ResearchManager } from "@/components/research-manager";
@@ -26,6 +25,7 @@ import { CATALOG_CATEGORIES } from "@/lib/catalog/types";
 import { catalog } from "@/lib/catalog";
 import { toDomainConstraint } from "@/lib/comparison/constraints";
 import { prisma } from "@/lib/db";
+import { loadProjectGraph } from "@/lib/graph/project-graph";
 import { formatDate, padCount } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +64,7 @@ export default async function ProjectPage({
   }
 
   const catalogParts = await catalog.listParts();
+  const loadedGraph = await loadProjectGraph(project.id);
 
   const artifactNames = new Map(
     project.artifacts.map((artifact) => [artifact.id, artifact.name]),
@@ -344,10 +345,10 @@ export default async function ProjectPage({
         </TabsContent>
 
         <TabsContent value="graph" className="mt-6">
-          <EmptyState
-            icon={Network}
-            title="Dependency graph not built yet"
-            description={`${padCount(counts.edges)} edges are already recorded. The interactive artifact graph and change-impact preview land in M5.`}
+          <ChangeImpact
+            projectId={project.id}
+            graph={loadedGraph?.graph ?? { nodes: [], edges: [] }}
+            catalogParts={catalogParts}
           />
         </TabsContent>
       </Tabs>
