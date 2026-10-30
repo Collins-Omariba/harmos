@@ -29,6 +29,19 @@ artifact, and decision belongs to it.
 - A CAD tool.
 - A BOM-only app.
 
+## Screenshots
+
+Screenshots show the seeded demo workspace (fictional Water Tank Monitor
+project, `demo@mail.com` account).
+
+![Project index with backup, import, and per-project requirement, component, and artifact counts](public/readme/home.png)
+
+![Project overview with brief, validation tests, and the requirement ledger](public/readme/project.png)
+
+![Component catalog with AI proposals, health review queue, LCSC import, and the parts table](public/readme/catalog.png)
+
+![Project assistant answering from stored project data with cited follow-ups](public/readme/ask_about.png)
+
 ## Features
 
 - **Projects** with requirements, constraints, components, artifacts, decisions,
