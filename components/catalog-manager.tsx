@@ -283,7 +283,7 @@ export function CatalogManager({ parts }: { parts: CatalogPart[] }) {
           </TableHeader>
           <TableBody>
             {filtered.map((part) => (
-              <TableRow key={part.id} className="border-border">
+              <TableRow key={part.id} id={`catalog-part-${part.id}`} className="border-border">
                 <TableCell>
                   <p className="numeric text-sm font-medium text-foreground">
                     {part.partNumber}

@@ -1,6 +1,11 @@
+import { CatalogHealth } from "@/components/catalog-health";
 import { CatalogManager } from "@/components/catalog-manager";
 import { CatalogProposer, type ProposalRow } from "@/components/catalog-proposer";
 import { catalog } from "@/lib/catalog";
+import {
+  catalogHealthQueue,
+  findDuplicateGroups,
+} from "@/lib/catalog/intelligence";
 import { prisma } from "@/lib/db";
 import { padCount } from "@/lib/format";
 
@@ -53,6 +58,8 @@ export default async function CatalogPage() {
     where: { status: "pending" },
     orderBy: { createdAt: "desc" },
   });
+  const duplicateGroups = findDuplicateGroups(parts);
+  const healthQueue = catalogHealthQueue(parts);
   const proposals: ProposalRow[] = proposalRows.map((row) => ({
     id: row.id,
     request: row.request,
@@ -84,6 +91,7 @@ export default async function CatalogPage() {
 
       <div className="mt-7 space-y-6">
         <CatalogProposer proposals={proposals} />
+        <CatalogHealth duplicateGroups={duplicateGroups} healthQueue={healthQueue} />
         <CatalogManager parts={parts} />
       </div>
     </div>

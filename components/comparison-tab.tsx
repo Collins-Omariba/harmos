@@ -1,11 +1,13 @@
 import { FlaskConical, Scale } from "lucide-react";
 
+import { DraftMissingPartButton } from "@/components/catalog-gap-actions";
 import { ComparisonCandidate } from "@/components/comparison-candidate";
 import { ComparisonRunner } from "@/components/comparison-runner";
 import { ConstraintManager } from "@/components/constraint-manager";
 import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/ui/badge";
-import type { CatalogPart } from "@/lib/catalog/types";
+import { analyzeCatalogGaps } from "@/lib/catalog/intelligence";
+import { catalogCategoryLabel, type CatalogPart } from "@/lib/catalog/types";
 import { parseCandidatePayload } from "@/lib/comparison/constraints";
 import type {
   CandidateStatus,
@@ -93,6 +95,7 @@ export function ComparisonTab({
     { pass: 0, review: 0, fail: 0 },
   );
 
+  const catalogGaps = analyzeCatalogGaps(constraints, catalogParts);
   const defaultCategory = run?.category ?? categories[0]?.key ?? "level-sensor";
   const defaultPartIds = (run?.candidates ?? [])
     .map((candidate) => candidate.catalogPartId)
@@ -220,6 +223,60 @@ export function ComparisonTab({
         defaultCategory={defaultCategory}
         defaultPartIds={defaultPartIds}
       />
+
+      <section className="rounded-lg border border-border bg-card/70 p-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="numeric text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+              Catalog coverage
+            </p>
+            <h3 className="mt-1.5 text-base font-medium text-foreground">
+              Gaps against these constraints
+            </h3>
+          </div>
+          <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+            {catalogGaps.filter((gap) => gap.gapCategories.length > 0).length} gaps
+          </span>
+        </div>
+
+        {catalogGaps.length > 0 ? (
+          <ul className="mt-4 divide-y divide-border border-y border-border">
+            {catalogGaps.map((gap) => (
+              <li key={gap.constraint.id} className="py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-foreground">{gap.constraint.label}</p>
+                    <p className="numeric mt-0.5 text-[10px] text-muted-foreground">
+                      {gap.totalPassing} catalog parts pass this constraint
+                    </p>
+                  </div>
+                  {gap.gapCategories.length === 0 ? (
+                    <Badge variant="outline" className="border-primary/35 bg-primary/10 font-mono text-[9px] text-primary">
+                      covered
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-destructive/35 bg-destructive/10 font-mono text-[9px] text-destructive">
+                      missing coverage
+                    </Badge>
+                  )}
+                </div>
+                {gap.gapCategories.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {gap.gapCategories.map((category) => (
+                      <span key={category} className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2 py-1">
+                        <span className="text-[11px] text-muted-foreground">{catalogCategoryLabel(category)}</span>
+                        <DraftMissingPartButton category={category} constraintLabel={gap.constraint.label} />
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 text-xs text-muted-foreground">Add constraints to analyze catalog coverage.</p>
+        )}
+      </section>
     </div>
   );
 }

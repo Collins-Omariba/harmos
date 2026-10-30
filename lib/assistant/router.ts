@@ -8,6 +8,7 @@
 
 export type AssistantIntent =
   | "bom_cost"
+  | "catalog"
   | "comparison"
   | "components"
   | "current_versions"
@@ -26,6 +27,18 @@ export type RoutedQuestion = {
 };
 
 const PATTERNS: { intent: AssistantIntent; patterns: RegExp[] }[] = [
+  {
+    intent: "catalog",
+    patterns: [
+      /catalog/,
+      /do we have/,
+      /what .* do we have/,
+      /in stock/,
+      /available (parts|components)/,
+      /under \$?\d/,
+      /below \$?\d/,
+    ],
+  },
   {
     intent: "bom_cost",
     patterns: [/\bbom\b/, /\bcost\b/, /budget/, /price/, /total/, /how much/, /cheap|expensive/],
@@ -105,6 +118,8 @@ export function intentLabel(intent: AssistantIntent): string {
   switch (intent) {
     case "bom_cost":
       return "Bill of materials";
+    case "catalog":
+      return "Catalog";
     case "comparison":
       return "Comparison";
     case "components":

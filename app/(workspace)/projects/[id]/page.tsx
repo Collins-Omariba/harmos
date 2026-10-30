@@ -12,6 +12,7 @@ import { ChangeImpact } from "@/components/change-impact";
 import { ComparisonTab } from "@/components/comparison-tab";
 import { ComponentManager } from "@/components/component-manager";
 import { DecisionManager } from "@/components/decision-manager";
+import { ExportProjectButton } from "@/components/backup-actions";
 import { ProjectEditor } from "@/components/project-editor";
 import { RequirementManager } from "@/components/requirement-manager";
 import { ResearchManager } from "@/components/research-manager";
@@ -124,6 +125,7 @@ export default async function ProjectPage({
             <p className="mt-1">Updated {formatDate(project.updatedAt)}</p>
             <div className="mt-2">
               <div className="flex items-center justify-end gap-2">
+                <ExportProjectButton projectId={project.id} />
                 <ProjectEditor
                   project={{
                     id: project.id,

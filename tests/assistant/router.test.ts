@@ -38,6 +38,11 @@ test("mentions match terms from the project's own data", () => {
   assert.equal(routed.intent, "bom_cost");
 });
 
+test("catalog questions route to the catalog", () => {
+  assert.equal(routeQuestion("What LDOs under $1 do we have?").intent, "catalog");
+  assert.equal(routeQuestion("Search the catalog for GNSS modules").intent, "catalog");
+});
+
 test("part questions route to components, not status", () => {
   assert.equal(
     routeQuestion("What is the main mcu in my projects?").intent,

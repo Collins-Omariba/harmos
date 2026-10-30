@@ -9,6 +9,7 @@ import {
   setCurrentArtifactAction,
   updateArtifactAction,
 } from "@/app/actions/records";
+import { uploadArtifactAction } from "@/app/actions/artifacts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { parseFirmwareMeta } from "@/lib/firmware/meta";
@@ -32,6 +33,10 @@ type Artifact = {
   hash: string;
   metaJson: string;
   current: boolean;
+  fileName: string | null;
+  filePath: string | null;
+  fileSize: number | null;
+  mimeType: string | null;
 };
 
 const KINDS = [
@@ -225,6 +230,69 @@ function ArtifactFields({
   );
 }
 
+function UploadArtifactDialog({ projectId }: { projectId: string }) {
+  const [kind, setKind] = useState("firmware");
+
+  return (
+    <RecordDialog
+      title="Upload artifact file"
+      description="Schematics, firmware binaries, datasheets, BOMs, and test logs up to 10 MB. The SHA-256 is recorded automatically."
+      action={uploadArtifactAction}
+      submitLabel="Upload file"
+      trigger={<AddButton label="Upload file" />}
+    >
+      <HiddenFields fields={{ projectId }} />
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Kind" htmlFor="upload-kind">
+          <select
+            id="upload-kind"
+            name="kind"
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            {KINDS.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Name" htmlFor="upload-name">
+          <TextInput id="upload-name" name="name" required placeholder="Tank Monitor Firmware" />
+        </Field>
+      </div>
+      <Field label="Version" htmlFor="upload-version">
+        <TextInput id="upload-version" name="version" required placeholder={kind === "firmware" ? "v0.4.0" : "rev B"} />
+      </Field>
+      <Field label="File" htmlFor="upload-file">
+        <input
+          id="upload-file"
+          name="file"
+          type="file"
+          required
+          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:py-2 file:text-sm file:text-foreground"
+        />
+      </Field>
+      {kind === "firmware" ? (
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Target MCU / board" htmlFor="upload-fw-target">
+            <TextInput id="upload-fw-target" name="fwTarget" placeholder="ESP32-S3" />
+          </Field>
+          <Field label="Profile" htmlFor="upload-fw-profile">
+            <NativeSelect id="upload-fw-profile" name="fwProfile" defaultValue="release">
+              <option value="release">release</option>
+              <option value="debug">debug</option>
+            </NativeSelect>
+          </Field>
+        </div>
+      ) : null}
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input type="checkbox" name="markCurrent" value="1" className="size-4 accent-primary" />
+        Mark as current version for this name
+      </label>
+    </RecordDialog>
+  );
+}
+
 function SetCurrentButton({
   projectId,
   recordId,
@@ -318,7 +386,8 @@ export function ArtifactManager({
 
   return (
     <div>
-      <div className="mb-3 flex justify-end">
+      <div className="mb-3 flex justify-end gap-2">
+        <UploadArtifactDialog projectId={projectId} />
         <RecordDialog
           title="Add artifact"
           description="Versioned files: schematics, firmware, datasheets, BOMs."
@@ -354,6 +423,14 @@ export function ArtifactManager({
                   </p>
                   {artifact.kind === "firmware" ? (
                     <FirmwareLine artifact={artifact} artifacts={artifacts} />
+                  ) : null}
+                  {artifact.filePath ? (
+                    <p className="numeric mt-1 text-[11px]">
+                      <a href={`/api/artifacts/${artifact.id}`} className="text-primary underline-offset-4 hover:underline">
+                        Download {artifact.fileName ?? "file"}
+                      </a>
+                      {artifact.fileSize !== null ? ` · ${(artifact.fileSize / 1024).toFixed(1)} KB` : ""}
+                    </p>
                   ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">

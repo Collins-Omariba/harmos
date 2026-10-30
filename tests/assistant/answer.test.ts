@@ -115,6 +115,28 @@ test("current versions, decisions, and validation read from storage", async () =
   assert.match(tests.text, /Sleep run: pending/);
 });
 
+test("catalog questions list global catalog matches", () => {
+  const answer = answerDeterministic(
+    snapshot({
+      catalogMatches: [
+        {
+          partNumber: "TPS7A02",
+          manufacturer: "Texas Instruments",
+          category: "ldo",
+          priceUsd: 0.35,
+          description: "Low dropout regulator.",
+        },
+      ],
+    }),
+    "What LDOs under $1 do we have?",
+    TERMS,
+  )!;
+
+  assert.equal(answer.source, "computed");
+  assert.match(answer.text, /TPS7A02/);
+  assert.ok(answer.citations.some((citation) => citation.href === "/catalog"));
+});
+
 test("capabilities describe the assistant honestly", async () => {
   const answer = answerDeterministic(snapshot(), "What can you do?", TERMS)!;
 

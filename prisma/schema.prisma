@@ -212,6 +212,12 @@ model Artifact {
   /// per family; enforced in the set-current action, not the database.
   current Boolean @default(false)
 
+  /// Uploaded file metadata. Bytes live under HARMOS_UPLOAD_DIR, never in SQLite.
+  fileName String?
+  filePath String?
+  fileSize Int?
+  mimeType String?
+
   project        Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
   edgesFrom      Edge[]                  @relation("EdgeFrom")
   edgesTo        Edge[]                  @relation("EdgeTo")

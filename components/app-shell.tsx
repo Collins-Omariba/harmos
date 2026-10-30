@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 
 import { NewProjectButton } from "@/components/new-project-button";
 import { ProjectNavList, LibraryNav } from "@/components/project-nav";
+import { logoutAction } from "@/app/actions/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Wordmark } from "@/components/wordmark";
 import { Button } from "@/components/ui/button";
@@ -85,9 +86,11 @@ function Sidebar({ projects }: { projects: ProjectNavItem[] }) {
 export function AppShell({
   projects,
   children,
+  authEnabled = false,
 }: {
   projects: ProjectNavItem[];
   children: React.ReactNode;
+  authEnabled?: boolean;
 }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
@@ -105,9 +108,13 @@ export function AppShell({
           Engineering workspace
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          <span className="numeric mr-2 hidden text-[10px] uppercase tracking-[0.16em] text-muted-foreground lg:inline">
-            local / no account
-          </span>
+          {authEnabled ? (
+            <form action={logoutAction}>
+              <Button type="submit" variant="ghost" size="sm">
+                Log out
+              </Button>
+            </form>
+          ) : null}
           <ThemeToggle />
         </div>
       </header>

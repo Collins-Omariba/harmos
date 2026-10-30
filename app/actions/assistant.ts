@@ -6,8 +6,10 @@ import {
   type AssistantAnswer,
   type ProjectSnapshot,
 } from "@/lib/assistant/answer";
+import { routeQuestion } from "@/lib/assistant/router";
 import { decodeConstraintValue } from "@/lib/comparison/constraints";
 import { catalog } from "@/lib/catalog";
+import { searchCatalog } from "@/lib/catalog/intelligence";
 import { prisma } from "@/lib/db";
 
 export type AskResult = AssistantAnswer;
@@ -60,6 +62,21 @@ export async function askAssistantAction(input: {
 
   const latestRun = project.comparisonRuns[0] ?? null;
   const catalogParts = await catalog.listParts();
+  const catalogSearch = searchCatalog(catalogParts, question, 8);
+  const routed = routeQuestion(question, [
+    ...project.components.map((c) => c.partNumber),
+    ...catalogParts.map((part) => part.partNumber),
+  ]);
+  const catalogMatches =
+    routed.intent === "catalog" || routed.mentions.length > 0
+      ? catalogSearch.parts.map((part) => ({
+          partNumber: part.partNumber,
+          manufacturer: part.manufacturer,
+          category: part.category,
+          priceUsd: part.priceUsd,
+          description: part.description,
+        }))
+      : [];
   const categoryByPartNumber = new Map(
     catalogParts.map((part) => [part.partNumber, part.category]),
   );
@@ -109,11 +126,13 @@ export async function askAssistantAction(input: {
       .filter((r) => r.selected)
       .map((r) => ({ title: r.title, url: r.url, note: r.selectionNote })),
     resourceIndexSize: project.resources.length,
+    catalogMatches,
   };
 
   const knownTerms = [
     ...project.components.map((c) => c.partNumber),
     ...project.artifacts.map((a) => a.name),
+    ...catalogParts.map((part) => part.partNumber),
   ];
 
   return answerLoadedQuestion(snapshot, question, knownTerms);

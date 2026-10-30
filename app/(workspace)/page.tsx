@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { FolderKanban } from "lucide-react";
 
+import {
+  ExportWorkspaceButton,
+  ImportProjectDialog,
+} from "@/components/backup-actions";
 import { NewProjectButton } from "@/components/new-project-button";
 import { ProjectStatusBadge } from "@/components/status-badges";
 import { EmptyState } from "@/components/empty-state";
@@ -34,6 +38,8 @@ export default async function ProjectsPage() {
           <span className="numeric hidden border-l border-primary pl-3 text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:inline">
             {padCount(activeCount)} active / {padCount(projects.length)} total
           </span>
+          <ExportWorkspaceButton />
+          <ImportProjectDialog />
           <NewProjectButton />
         </div>
       </div>

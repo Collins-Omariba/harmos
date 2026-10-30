@@ -14,6 +14,7 @@ import {
 } from "@/lib/comparison/constraints";
 import type { ComparisonOperator } from "@/lib/comparison/types";
 import { firmwareMetaSchema } from "@/lib/firmware/meta";
+import { deleteArtifactFile } from "@/lib/artifacts/storage";
 import { prisma } from "@/lib/db";
 
 export type RecordActionState = {
@@ -715,6 +716,11 @@ export async function deleteArtifactAction(
   const projectId = String(formData.get("projectId") ?? "");
   const recordId = String(formData.get("recordId") ?? "");
 
+  const existing = await prisma.artifact.findFirst({
+    where: { id: recordId, projectId },
+    select: { filePath: true },
+  });
+
   const deleted = await prisma.artifact.deleteMany({
     where: { id: recordId, projectId },
   });
@@ -723,6 +729,7 @@ export async function deleteArtifactAction(
     return fail("Artifact not found in this project.");
   }
 
+  await deleteArtifactFile(existing?.filePath);
   return done(projectId, "Artifact deleted.");
 }
 

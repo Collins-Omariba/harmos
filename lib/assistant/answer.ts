@@ -44,6 +44,13 @@ export type ProjectSnapshot = {
   validationTests: { name: string; status: string }[];
   selectedResources: { title: string; url: string; note: string }[];
   resourceIndexSize: number;
+  catalogMatches?: {
+    partNumber: string;
+    manufacturer: string;
+    category: string;
+    priceUsd: number | null;
+    description: string;
+  }[];
 };
 
 export type AssistantCitation = { label: string; href: string };
@@ -113,6 +120,15 @@ export function buildFacts(snapshot: ProjectSnapshot): string {
     ...snapshot.selectedResources.map((r) => `- ${r.title}: ${r.note || r.url}`),
   );
 
+  if (snapshot.catalogMatches && snapshot.catalogMatches.length > 0) {
+    lines.push("Catalog matches for this question (global catalog, not necessarily selected):");
+    for (const part of snapshot.catalogMatches.slice(0, 8)) {
+      lines.push(
+        `- ${part.partNumber} (${part.manufacturer}, ${part.category}${part.priceUsd !== null ? `, $${part.priceUsd.toFixed(2)}` : ", no price"}): ${truncate(part.description, 140)}`,
+      );
+    }
+  }
+
   const joined = lines.join("\n");
   return joined.length > 4000 ? `${joined.slice(0, 4000)}…` : joined;
 }
@@ -134,6 +150,27 @@ function handleIntent(
   const id = snapshot.id;
 
   switch (intent) {
+    case "catalog": {
+      const matches = snapshot.catalogMatches ?? [];
+      if (matches.length === 0) {
+        return computed(
+          "No catalog parts match that yet. Open the catalog to propose or add the missing part.",
+          [{ label: "Catalog", href: "/catalog" }],
+          ["What passed the comparison?", "What does the BOM total?"],
+        );
+      }
+      return computed(
+        `Catalog matches: ${matches
+          .map(
+            (part) =>
+              `${part.partNumber} (${part.manufacturer}, ${part.category}${part.priceUsd !== null ? `, $${part.priceUsd.toFixed(2)}` : ", no price"})`,
+          )
+          .join("; ")}. These are catalog rows, not parts selected into this project yet.`,
+        [{ label: "Catalog", href: "/catalog" }],
+        ["Add the best one to the BOM", "What passed the comparison?"],
+      );
+    }
+
     case "bom_cost": {
       const totals = computeBomTotals(snapshot.components);
       const unpriced = snapshot.components.filter(

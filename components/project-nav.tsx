@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, Package } from "lucide-react";
+import { ChevronRight, Package, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { ProjectNavItem } from "@/lib/projects";
@@ -63,6 +63,7 @@ export function ProjectNavList({
 export function LibraryNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const active = pathname === "/catalog";
+  const searchActive = pathname === "/search";
 
   return (
     <nav className="space-y-0.5 p-2" aria-label="Library">
@@ -84,6 +85,25 @@ export function LibraryNav({ onNavigate }: { onNavigate?: () => void }) {
           className={cn(
             "size-3.5 shrink-0 text-muted-foreground/0 transition-colors",
             active && "text-muted-foreground",
+            "group-hover:text-muted-foreground",
+          )}
+        />
+      </Link>
+      <Link
+        href="/search"
+        onClick={onNavigate}
+        aria-current={searchActive ? "page" : undefined}
+        className={cn(
+          "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
+          searchActive && "bg-sidebar-accent text-foreground",
+        )}
+      >
+        <Search className="size-3.5 shrink-0" />
+        <span className="min-w-0 flex-1 truncate">Search</span>
+        <ChevronRight
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground/0 transition-colors",
+            searchActive && "text-muted-foreground",
             "group-hover:text-muted-foreground",
           )}
         />
