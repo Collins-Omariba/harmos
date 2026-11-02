@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Plus, Sparkles } from "lucide-react";
+import { Check, Loader2, Plus, Sparkles } from "lucide-react";
 
 import {
   createProjectWithPacksAction,
   suggestConstraintsAction,
   type SuggestState,
 } from "@/app/actions/projects";
-import { AiProgress } from "@/components/ai-progress";
+import { AiProgress, useElapsedSeconds } from "@/components/ai-progress";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,6 +23,156 @@ import { cn } from "@/lib/utils";
 import { PACK_DIMENSIONS } from "@/lib/comparison/packs";
 
 type Suggestion = SuggestState["suggestions"][number];
+
+const CREATION_STEPS = [
+  { title: "Saving your project", detail: "Name, brief, packs, and constraints are stored." },
+  { title: "Scoring the catalog", detail: "Every category is scored deterministically against your constraints." },
+  { title: "AI explains the first comparison", detail: "The reasoning model thinks silently, then writes the trade-off summary. This is the long part." },
+  { title: "Opening your project", detail: "You land on the Comparison tab with the first run ready." },
+] as const;
+
+const CREATION_TIPS = [
+  "While you wait: the scores you'll see are computed in code — the AI only explains them, it can't move a number.",
+  "While you wait: after this, the BOM, research index, and validation tabs all start from this same brief.",
+  "While you wait: picked the wrong packs? Constraints can be edited later in the project — nothing here is locked in.",
+  "While you wait: a slow answer usually means a careful one — the model is checking your constraints against real parts.",
+] as const;
+
+/** Which creation step the wait has most likely reached, by elapsed time. */
+export function creationStepForElapsed(elapsedSeconds: number): number {
+  if (elapsedSeconds < 4) return 0;
+  if (elapsedSeconds < 12) return 1;
+  if (elapsedSeconds < 75) return 2;
+  return 3;
+}
+
+/**
+ * The wait screen shown while a project is created. Creation saves the
+ * project, scores every catalog category, then waits on the AI explaining
+ * the first comparison — easily 30-90s of silent reasoning. Instead of a
+ * lone "Creating..." button, this gives the wait a shape: a step journey
+ * (advanced by elapsed time, since a server action can't report back
+ * mid-flight), the project being built to re-read, rotating notes on what
+ * happens next, and a timer so the wait reads as measured, not hung.
+ * Exported for tests.
+ */
+export function ProjectCreatingPanel({
+  name,
+  brief,
+  packsCount,
+  extrasCount,
+}: {
+  name: string;
+  brief: string;
+  packsCount: number;
+  extrasCount: number;
+}) {
+  const elapsed = useElapsedSeconds();
+  const activeStep = creationStepForElapsed(elapsed);
+  const tip = CREATION_TIPS[Math.floor(elapsed / 6) % CREATION_TIPS.length];
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="space-y-4 rounded-lg border border-primary/30 bg-primary/5 p-4"
+    >
+      <div className="flex items-start gap-3">
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+          <Sparkles className="size-5 text-primary motion-safe:animate-pulse" />
+          <Loader2 className="absolute -right-1 -bottom-1 size-4 rounded-full bg-background text-primary motion-safe:animate-spin" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-foreground">
+            Building “{name.trim() || "your project"}”…
+          </p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {packsCount} pack{packsCount === 1 ? "" : "s"} · {extrasCount}{" "}
+            extra{extrasCount === 1 ? "" : "s"} — sit tight, this part does
+            the heavy lifting for the whole project.
+          </p>
+        </div>
+        <span className="numeric shrink-0 text-xs text-muted-foreground tabular-nums">
+          {elapsed}s
+        </span>
+      </div>
+
+      <div
+        aria-hidden="true"
+        className="h-1 overflow-hidden rounded-full bg-primary/15"
+      >
+        <div className="h-full w-2/5 animate-ai-progress rounded-full bg-primary/70" />
+      </div>
+
+      <ol className="space-y-2">
+        {CREATION_STEPS.map((step, index) => {
+          const done = index < activeStep;
+          const active = index === activeStep;
+          return (
+            <li key={step.title} className="flex items-start gap-2.5">
+              <span
+                className={cn(
+                  "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                  done
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : active
+                      ? "border-primary text-primary"
+                      : "border-border text-muted-foreground",
+                )}
+              >
+                {done ? (
+                  <Check className="size-3" />
+                ) : active ? (
+                  <Loader2 className="size-3 motion-safe:animate-spin" />
+                ) : (
+                  <span className="size-1 rounded-full bg-current" />
+                )}
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "block text-xs",
+                    active
+                      ? "font-medium text-foreground"
+                      : done
+                        ? "text-foreground/70"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {step.title}
+                </span>
+                {active ? (
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">
+                    {step.detail}
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      {brief.trim() ? (
+        <p className="line-clamp-3 rounded-md border border-border bg-background/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <span className="numeric mr-1.5 text-[9px] uppercase tracking-[0.14em]">
+            Your brief
+          </span>
+          {brief.trim()}
+        </p>
+      ) : null}
+
+      <p className="text-[11px] leading-relaxed text-muted-foreground italic">
+        {tip}
+      </p>
+      {elapsed >= 45 ? (
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Still with you — reasoning models can take a minute or more on this
+          step. No need to refresh; it will open the project on its own.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function NewProjectButton({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
@@ -121,7 +271,13 @@ export function NewProjectButton({ className }: { className?: string }) {
   ].filter(Boolean);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Keep the wait screen in front of the user while creation runs.
+        if (!creating) setOpen(next);
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className={className}>
           <Plus data-icon="inline-start" />
@@ -320,7 +476,12 @@ export function NewProjectButton({ className }: { className?: string }) {
         </div>
 
         {creating ? (
-          <AiProgress label="Creating your project — saving it, scoring the first comparison, then asking the AI to explain it" />
+          <ProjectCreatingPanel
+            name={name}
+            brief={brief}
+            packsCount={packs.size}
+            extrasCount={checked.size}
+          />
         ) : null}
 
         <DialogFooter>

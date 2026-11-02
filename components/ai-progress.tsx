@@ -32,15 +32,8 @@ export function aiStageForElapsed(elapsedSeconds: number): string {
   return "Deep in thought — complex requests can take a minute or more. Hang tight.";
 }
 
-export function AiProgress({
-  label = "Asking the AI",
-  compact = false,
-  className,
-}: {
-  label?: string;
-  compact?: boolean;
-  className?: string;
-}) {
+/** Seconds since mount, ticking twice a second. Shared by wait indicators. */
+export function useElapsedSeconds(): number {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -50,6 +43,20 @@ export function AiProgress({
     }, 500);
     return () => clearInterval(timer);
   }, []);
+
+  return elapsed;
+}
+
+export function AiProgress({
+  label = "Asking the AI",
+  compact = false,
+  className,
+}: {
+  label?: string;
+  compact?: boolean;
+  className?: string;
+}) {
+  const elapsed = useElapsedSeconds();
 
   return (
     <div
