@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SpecFields } from "@/components/catalog-spec-fields";
 import { computeBomTotals, formatCents } from "@/lib/bom/totals";
 import { CATALOG_CATEGORIES, type CatalogPart } from "@/lib/catalog/types";
 import {
@@ -29,6 +30,7 @@ import {
   EditButton,
   Field,
   HiddenFields,
+  NativeSelect,
   RecordDialog,
   TextArea,
   TextInput,
@@ -123,6 +125,100 @@ function ComponentFields({ component }: { component?: ComponentRow }) {
         />
       </Field>
     </>
+  );
+}
+
+/**
+ * Optional catalog cross-add for the Add component dialog. Ticking the box
+ * reveals the extra fields a catalog row needs (category, description,
+ * source, specs); on submit the component is added to the project as usual
+ * and the part is also created in the catalog. Exported for tests.
+ */
+export function AlsoAddToCatalogFields() {
+  const [enabled, setEnabled] = useState(false);
+  const [category, setCategory] = useState<string>("mcu");
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="space-y-3 rounded-md border border-dashed border-border bg-muted/20 p-3">
+      <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
+        <input
+          type="checkbox"
+          name="alsoAddToCatalog"
+          checked={enabled}
+          onChange={(event) => setEnabled(event.target.checked)}
+          className="size-4 shrink-0 accent-primary"
+        />
+        Also add this part to the catalog
+      </label>
+      {enabled ? (
+        <>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            The catalog needs a few more facts than the BOM does. The part
+            number, manufacturer, package, datasheet URL, and price above are
+            reused; fill the rest here. At least one spec is required.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Catalog category" htmlFor="comp-catalog-category">
+              <NativeSelect
+                id="comp-catalog-category"
+                name="category"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                {CATALOG_CATEGORIES.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+            <Field label="Retrieved on" htmlFor="comp-catalog-retrieved">
+              <TextInput
+                id="comp-catalog-retrieved"
+                name="sourceRetrievedAt"
+                type="date"
+                required
+                defaultValue={today}
+              />
+            </Field>
+          </div>
+          <Field label="Description (for the catalog)" htmlFor="comp-catalog-desc">
+            <TextArea
+              id="comp-catalog-desc"
+              name="description"
+              required
+              rows={2}
+              placeholder="What the part is, in one or two sentences."
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Source URL" htmlFor="comp-catalog-source">
+              <TextInput
+                id="comp-catalog-source"
+                name="sourceUrl"
+                type="url"
+                required
+                placeholder="https://…"
+              />
+            </Field>
+            <Field label="Tags (comma separated)" htmlFor="comp-catalog-tags">
+              <TextInput
+                id="comp-catalog-tags"
+                name="tags"
+                placeholder="lora, low-power"
+              />
+            </Field>
+          </div>
+          <div className="space-y-1.5">
+            <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+              Catalog specs — at least one
+            </span>
+            <SpecFields id="comp-catalog-specs" category={category} />
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -432,6 +528,7 @@ export function ComponentManager({
           <HiddenFields fields={{ projectId }} />
           <AiComponentProposeBox />
           <ComponentFields />
+          <AlsoAddToCatalogFields />
         </RecordDialog>
       </div>
 

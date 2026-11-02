@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { createCatalogPartAction } from "@/app/actions/catalog";
 import { requireProjectAccess, requireSessionUser } from "@/lib/auth/users";
 import { dollarsToCents } from "@/lib/bom/totals";
 import { catalogToComponentInput } from "@/lib/bom/fromCatalog";
@@ -471,6 +472,43 @@ export async function createComponentAction(
       unitPriceCents,
     },
   });
+
+  // Optional cross-add: the same part also becomes a catalog row, through
+  // the catalog's own action so its validation (known category, at least
+  // one spec, unique part number, real URLs) applies unchanged.
+  if (formData.get("alsoAddToCatalog") === "on") {
+    const catalogForm = new FormData();
+    catalogForm.set("partNumber", parsed.data.partNumber);
+    catalogForm.set("manufacturer", parsed.data.manufacturer);
+    catalogForm.set("package", parsed.data.package);
+    catalogForm.set("datasheetUrl", parsed.data.datasheetUrl ?? "");
+    catalogForm.set("priceUsd", parsed.data.unitPrice);
+    for (const field of [
+      "category",
+      "description",
+      "sourceUrl",
+      "sourceRetrievedAt",
+      "tags",
+    ]) {
+      catalogForm.set(field, String(formData.get(field) ?? ""));
+    }
+    for (const [name, value] of formData.entries()) {
+      if (name.startsWith("spec_")) {
+        catalogForm.set(name, String(value));
+      }
+    }
+
+    const catalogResult = await createCatalogPartAction(null, catalogForm);
+    if (!catalogResult?.ok) {
+      return fail(
+        `Component added to the project, but not to the catalog: ${catalogResult?.message ?? "catalog add failed."}`,
+      );
+    }
+    return done(
+      parsed.data.projectId,
+      "Component added to the BOM, and the part was also added to the catalog.",
+    );
+  }
 
   return done(parsed.data.projectId, "Component added to the BOM.");
 }

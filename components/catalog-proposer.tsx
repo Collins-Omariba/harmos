@@ -1,9 +1,14 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useActionState, useState, type FormEvent } from "react";
 import { Copy, Sparkles } from "lucide-react";
 
+import {
+  createCatalogPartAction,
+  type CatalogActionState,
+} from "@/app/actions/catalog";
 import { AiProgress } from "@/components/ai-progress";
+import { PartFields } from "@/components/catalog-manager";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -284,9 +289,57 @@ function ProposeForm() {
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         The AI&apos;s reply shows up right here as readable text — nothing is
-        written to the catalog. Transcribe the parts you want with the
-        add-part form below.
+        written to the catalog. Copy the part you want into the add-part form
+        beside this one.
       </p>
+    </form>
+  );
+}
+
+/**
+ * The add-part form that sits beside the AI text in the proposer dialog, so
+ * the user can copy a suggested part straight across and save it without
+ * opening a second dialog. Same fields and action as the catalog table's
+ * Add part dialog.
+ */
+export function AddPartSideForm() {
+  const [state, formAction, pending] = useActionState<
+    CatalogActionState,
+    FormData
+  >(createCatalogPartAction, null);
+
+  return (
+    <form
+      action={formAction}
+      className="space-y-4 rounded-md border border-border bg-card/60 p-3"
+    >
+      <div>
+        <p className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Add part 
+        </p>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          Fill these in from the suggestion on the left, verify against the
+          datasheet, then save. Nothing is added until you submit this form.
+        </p>
+      </div>
+      <PartFields />
+      {state ? (
+        <p
+          className={cn(
+            "rounded-md border px-3 py-2 text-xs",
+            state.ok
+              ? "border-primary/30 bg-primary/5 text-primary"
+              : "border-destructive/30 bg-destructive/5 text-destructive",
+          )}
+        >
+          {state.message}
+        </p>
+      ) : null}
+      <div className="flex justify-end">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Adding…" : "Add part to catalog"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -300,7 +353,7 @@ export function CatalogProposer() {
             Grow the catalog
           </p>
           <h2 className="mt-1.5 text-base font-medium text-foreground">
-            Propose parts with AI
+            Propose &amp; add parts with AI
           </h2>
         </div>
       </div>
@@ -312,14 +365,18 @@ export function CatalogProposer() {
             New proposal
           </Button>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-5xl">
           <DialogHeader>
-            <DialogTitle>Propose catalog parts</DialogTitle>
+            <DialogTitle>Propose &amp; add catalog parts</DialogTitle>
             <DialogDescription>
-              Describe what to add, or paste source text to extract.
+              AI suggestions on the left, the add-part fields on the right —
+              copy a part across and save it, all in one place.
             </DialogDescription>
           </DialogHeader>
-          <ProposeForm />
+          <div className="grid items-start gap-5 md:grid-cols-2">
+            <ProposeForm />
+            <AddPartSideForm />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

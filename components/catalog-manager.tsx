@@ -49,7 +49,7 @@ const ORIGIN_STYLES: Record<string, string> = {
   agent: "border-chart-2/40 bg-chart-2/10 text-chart-2",
 };
 
-function PartFields({ part }: { part?: CatalogPart }) {
+export function PartFields({ part }: { part?: CatalogPart }) {
   const id = part ? `catalog-${part.id}` : "catalog-new";
   const [category, setCategory] = useState<string>(part?.category ?? "level-sensor");
   return (

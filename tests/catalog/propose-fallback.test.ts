@@ -5,7 +5,8 @@ import { renderToString } from "react-dom/server";
 import React from "react";
 
 import { proposeCatalogPartsAction } from "@/app/actions/catalog";
-import { RawOutputBox } from "@/components/catalog-proposer";
+import { AddPartSideForm, RawOutputBox } from "@/components/catalog-proposer";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 function completionBody(content: string): string {
   return JSON.stringify({
@@ -96,6 +97,20 @@ test("the model's text is shown verbatim for manual transcription", async () => 
     }
     restoreEnv(previous);
   }
+});
+
+test("the side add-part form renders catalog fields for direct copying", () => {
+  const html = renderToString(
+    React.createElement(
+      TooltipProvider,
+      null,
+      React.createElement(AddPartSideForm),
+    ),
+  );
+  assert.ok(html.includes("Add part "));
+  assert.ok(html.includes('name="partNumber"'), "has the part number field");
+  assert.ok(html.includes('name="spec_supplyMinV"'), "has spec fields");
+  assert.ok(html.includes("Add part to catalog"), "has the save action");
 });
 
 test("the raw-output box renders the text and a copy action", () => {
