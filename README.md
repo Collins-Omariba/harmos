@@ -50,8 +50,8 @@ project, `demo@mail.com` account).
 - **Deterministic comparison engine** scoring catalog candidates against hard
   constraints, with AI-written explanations and one-click BOM promotion.
 - **Component catalog** Add real parts with sourced specs, category-aware
-  entry forms, health/duplicate review queues, gap analysis, and AI-assisted
-  proposals that require human approval.
+  entry forms, health/duplicate review queues, gap analysis, and AI-drafted
+  part descriptions.
 - **LCSC distributor import** by product code (public detail endpoint, no
   keys needed; signed official API as fallback).
 - **Artifact uploads** (schematics, firmware, datasheets, test logs) with
@@ -111,6 +111,7 @@ All in `.env` (see `.env.example`):
 | `AI_BASE_URL`          | `https://api.meta.ai/v1` | OpenAI-compatible base URL for AI features.          |
 | `AI_API_KEY`           | `your_key_here`          | Provider key. Leave the placeholder to stay offline. |
 | `AI_MODEL`             | `muse-spark-1.3`         | Model id sent by the AI client.                      |
+| `AI_MAX_TOKENS`        | `16000`                  | Output-token budget per call; reasoning models need headroom for hidden thinking (text calls use at least 16000). |
 | `HARMOS_CACHE_DIR`     | `./.cache`               | AI disk cache root.                                  |
 | `HARMOS_DEMO_MODE`     | `0`                      | Replay cached AI responses when set to 1.            |
 | `HARMOS_UPLOAD_DIR`    | `./data/uploads`         | Artifact file storage root.                          |

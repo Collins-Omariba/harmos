@@ -117,6 +117,32 @@ function safeTaskName(taskName: string): string {
   return taskName.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
+/** First 300 chars, single-lined, for failure messages. */
+function rawExcerpt(content: string, maxChars = 300): string {
+  const flat = content.replace(/\s+/g, " ").trim();
+  return flat.length <= maxChars ? flat : `${flat.slice(0, maxChars)}…`;
+}
+
+/**
+ * Full prompt + raw model reply dumps for debugging model behavior.
+ * Opt-in via HARMOS_AI_DEBUG=1; writes one JSON file per attempt under
+ * logs/ai-debug/. Off by default — replies can be large.
+ */
+async function dumpAiDebug(
+  taskName: string,
+  cacheKey: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  if (process.env.HARMOS_AI_DEBUG !== "1") return;
+  const dir = path.resolve(process.cwd(), "logs", "ai-debug");
+  await mkdir(dir, { recursive: true });
+  const file = path.join(
+    dir,
+    `${safeTaskName(taskName)}-${Date.now()}-${cacheKey.slice(0, 8)}.json`,
+  );
+  await writeFile(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+}
+
 export function taskCachePath(taskName: string, cacheKey: string): string {
   const { cacheDir } = getAiConfig();
 
@@ -201,6 +227,23 @@ export async function appendAiLog(entry: AiLogEntry): Promise<void> {
 export const LIVE_TEMPERATURE = 0.2;
 export const LIVE_MAX_TOKENS = 4000;
 export const LIVE_TIMEOUT_MS = 90_000;
+/**
+ * Text tasks start here, not at LIVE_MAX_TOKENS: reasoning models spend part
+ * of the output budget on hidden thinking before emitting any visible text,
+ * so a 4k (or even 8k) budget can end at `finish_reason: "length"` with an
+ * empty message — that is exactly what the 4k/8k debug dumps show, while
+ * the same prompt completed at 16k. One generous budget up front replaces
+ * the old retry-and-double ladder. `AI_MAX_TOKENS` can raise this further
+ * but not lower it (a stale `AI_MAX_TOKENS=4000` in .env must not starve
+ * text calls back into empty replies).
+ */
+export const LIVE_TEXT_MAX_TOKENS = 16_000;
+
+/** `AI_MAX_TOKENS` when set to a positive integer, else `fallback`. */
+export function resolveMaxTokens(fallback: number): number {
+  const raw = Number(process.env.AI_MAX_TOKENS);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
 
 function buildSystemPrompt(outputSchema: z.ZodType, webSearch = false): string {
   let shape = "";
@@ -240,10 +283,248 @@ function buildSystemPrompt(outputSchema: z.ZodType, webSearch = false): string {
  * model searches server-side; nothing is fetched client-side and no search
  * API key exists anywhere in this codebase.
  */
+/**
+ * One streamed chunk from the model. `text` is visible answer text;
+ * `reasoning` is the model's thinking text — only populated when the
+ * provider actually sends it (the current provider usually does not, which
+ * is why answers seem to appear out of nowhere after a long silence).
+ */
+export type AiStreamDelta = { text: string; reasoning: string };
+export type AiStreamCallback = (
+  delta: AiStreamDelta,
+) => void | Promise<void>;
+
+function reasoningFromDelta(delta: unknown): string {
+  if (!delta || typeof delta !== "object") return "";
+  const record = delta as Record<string, unknown>;
+  return typeof record.reasoning_content === "string"
+    ? record.reasoning_content
+    : typeof record.reasoning === "string"
+      ? record.reasoning
+      : "";
+}
+
 export type RunTaskOpts = {
   /** Ask the model to browse the web while answering (server-side search). */
   webSearch?: boolean;
+  /**
+   * Stream the reply and report each chunk. Only usable from route
+   * handlers — server actions cannot push chunks to the browser.
+   */
+  onDelta?: AiStreamCallback;
+  /**
+   * Appended to the prompt when retrying without search after the endpoint
+   * rejects web-search options. Lets tasks whose prompts demand browsing
+   * (e.g. catalog drafting) degrade into an explicit no-browse mode instead
+   * of failing their own guardrails.
+   */
+  noSearchPromptSuffix?: string;
+  /** Fired when the no-search fallback triggers, so callers can say so. */
+  onSearchUnsupported?: () => void;
 };
+
+/**
+ * Thrown when the model replies with unusable output (not JSON, or JSON
+ * that fails the output schema) even after the repair retry. Carries the
+ * raw model text so callers can show it to the user for manual transcription
+ * instead of dropping the work silently.
+ */
+export class AiOutputError extends Error {
+  readonly taskName: string;
+  readonly raw: string;
+
+  constructor(taskName: string, message: string, raw: string) {
+    super(message);
+    this.name = "AiOutputError";
+    this.taskName = taskName;
+    this.raw = raw;
+  }
+}
+
+/**
+ * Plain-text twin of runTask for tasks where the human reads the reply
+ * directly (no JSON shape to validate). Same caching, logging, demo-mode,
+ * and API-key guards. Deliberately plain: one bare chat call — no
+ * web-search or response-format options, no repair/strip/budget retry
+ * ladder — and the model's text is returned as-is. Pass `onDelta` (route
+ * handlers only) to stream chunks, including provider reasoning text when
+ * the provider sends any, as they arrive.
+ */
+export async function runTextTask(
+  taskName: string,
+  prompt: string,
+  opts?: { onDelta?: AiStreamCallback },
+): Promise<string> {
+  const startedAt = Date.now();
+  const config = getAiConfig();
+  // The "/text" namespace keeps text caches apart from JSON-task caches.
+  const cacheKey = taskCacheKey(`${taskName}/text`, prompt, z.object({}));
+  const logBase = {
+    ts: new Date().toISOString(),
+    task: taskName,
+    model: config.model,
+    baseUrl: config.baseUrl,
+    cacheKey,
+    tokens: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    latencyMs: 0,
+  } satisfies Omit<AiLogEntry, "cacheHit" | "latencyMs" | "status"> & {
+    latencyMs: number;
+  };
+
+  const cached = await readTaskCache(taskName, cacheKey, z.string());
+  if (cached !== null) {
+    await appendAiLog({
+      ...logBase,
+      cacheHit: true,
+      latencyMs: Date.now() - startedAt,
+      status: "cache_hit",
+    });
+    await opts?.onDelta?.({ text: cached, reasoning: "" });
+    return cached;
+  }
+
+  if (config.demoMode) {
+    const error = `demo_mode_cache_miss:${taskName}`;
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error,
+    });
+    throw new Error(error);
+  }
+
+  if (!config.apiKeyConfigured) {
+    const error = "ai_key_not_configured";
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error,
+    });
+    throw new Error(
+      "AI_API_KEY is not configured. Put a real provider key in .env (it must not be the your_key_here placeholder) to enable live AI tasks.",
+    );
+  }
+
+  // One bare call. No web_search_options / response_format, and no retry
+  // ladder: the previous ladder started at 4k, got empty `length` replies,
+  // and burned two full calls doubling 4k -> 8k before 16k finally worked.
+  const maxTokens = Math.max(
+    resolveMaxTokens(LIVE_TEXT_MAX_TOKENS),
+    LIVE_TEXT_MAX_TOKENS,
+  );
+
+  const client = createOpenAIClient();
+  const requestBody = {
+    model: config.model,
+    messages: [
+      {
+        role: "system" as const,
+        content:
+          "You are a hardware engineering assistant. Reply in readable plain text. No JSON unless asked.",
+      },
+      { role: "user" as const, content: prompt },
+    ],
+    temperature: LIVE_TEMPERATURE,
+    max_tokens: maxTokens,
+  };
+  let text = "";
+  let reasoning = "";
+  let finishReason = "unknown";
+  let usage: AiUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  try {
+    if (opts?.onDelta) {
+      const stream = await client.chat.completions.create(
+        { ...requestBody, stream: true },
+        { timeout: LIVE_TIMEOUT_MS },
+      );
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        const deltaText = delta?.content ?? "";
+        const deltaReasoning = reasoningFromDelta(delta);
+        text += deltaText;
+        reasoning += deltaReasoning;
+        if (chunk.choices[0]?.finish_reason) {
+          finishReason = chunk.choices[0].finish_reason;
+        }
+        if (chunk.usage) {
+          usage = {
+            inputTokens: chunk.usage.prompt_tokens ?? 0,
+            outputTokens: chunk.usage.completion_tokens ?? 0,
+            totalTokens: chunk.usage.total_tokens ?? 0,
+          };
+        }
+        if (deltaText || deltaReasoning) {
+          await opts.onDelta({ text: deltaText, reasoning: deltaReasoning });
+        }
+      }
+    } else {
+      const completion = await client.chat.completions.create(
+        requestBody,
+        { timeout: LIVE_TIMEOUT_MS },
+      );
+      const choice = completion.choices[0];
+      finishReason = choice?.finish_reason ?? "unknown";
+      text = choice?.message?.content ?? "";
+      reasoning = reasoningFromDelta(choice?.message);
+      usage = {
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+        totalTokens: completion.usage?.total_tokens ?? 0,
+      };
+    }
+  } catch (error) {
+    await appendAiLog({
+      ...logBase,
+      cacheHit: false,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error: `ai_request_failed:${taskName}`,
+    });
+    throw error instanceof Error ? error : new Error("ai_request_failed");
+  }
+
+  await dumpAiDebug(taskName, cacheKey, {
+    at: new Date().toISOString(),
+    model: config.model,
+    maxTokens,
+    streamed: Boolean(opts?.onDelta),
+    prompt,
+    rawReply: text,
+    finishReason,
+    reasoningChars: reasoning.length,
+    usage,
+  });
+
+  if (!text.trim()) {
+    const message =
+      finishReason === "length"
+        ? `ai_empty_reply:${taskName}: no text after ${maxTokens} output tokens (finish_reason=length) — the model used its budget on hidden reasoning; raise AI_MAX_TOKENS above ${maxTokens} or use a non-reasoning model`
+        : `ai_empty_reply:${taskName}: model returned no text (finish_reason=${finishReason})`;
+    await appendAiLog({
+      ...logBase,
+      tokens: usage,
+      cacheHit: false,
+      latencyMs: Date.now() - startedAt,
+      status: "error",
+      error: message,
+    });
+    throw new Error(message);
+  }
+
+  await writeTaskCache(taskName, cacheKey, text, usage);
+  await appendAiLog({
+    ...logBase,
+    tokens: usage,
+    cacheHit: false,
+    latencyMs: Date.now() - startedAt,
+    status: "ok",
+  });
+  return text;
+}
 
 export async function runTask<T>(
   taskName: string,
@@ -306,6 +587,9 @@ export async function runTask<T>(
 
   return runLive(taskName, inputSchema, outputSchema, prompt, logBase, {
     webSearch: opts?.webSearch ?? false,
+    noSearchPromptSuffix: opts?.noSearchPromptSuffix,
+    onSearchUnsupported: opts?.onSearchUnsupported,
+    onDelta: opts?.onDelta,
     startedAt,
   });
 }
@@ -314,13 +598,30 @@ type LogBase = Omit<AiLogEntry, "cacheHit" | "latencyMs" | "status"> & {
   latencyMs: number;
 };
 
+function isUnsupportedSearchError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const status = (error as { status?: number }).status;
+  return (
+    status === 400 &&
+    /web_search|unknown.*(param|field)|unrecognized/i.test(error.message)
+  );
+}
+
 async function runLive<T>(
   taskName: string,
   inputSchema: z.ZodType,
   outputSchema: z.ZodType<T>,
   prompt: string,
   logBase: LogBase,
-  options: { webSearch: boolean; startedAt: number },
+  options: {
+    webSearch: boolean;
+    noSearchPromptSuffix?: string;
+    onSearchUnsupported?: () => void;
+    onDelta?: AiStreamCallback;
+    startedAt: number;
+  },
 ): Promise<T> {
   const config = getAiConfig();
   const startedAt = options.startedAt;
@@ -334,51 +635,98 @@ async function runLive<T>(
     usage: AiUsage;
   }> {
     const client = createOpenAIClient();
-    const completion = await client.chat.completions.create(
-      {
-        model: config.model,
-        messages: [
-          {
-            role: "system",
-            content: buildSystemPrompt(outputSchema, withSearch),
-          },
-          { role: "user", content: promptText },
-        ],
-        temperature: LIVE_TEMPERATURE,
-        max_tokens: LIVE_MAX_TOKENS,
-        response_format: { type: "json_object" },
-        ...(withSearch
-          ? { web_search_options: { search_context_size: "medium" as const } }
-          : {}),
-      },
-      { timeout: LIVE_TIMEOUT_MS },
-    );
+    const requestBody = {
+      model: config.model,
+      messages: [
+        {
+          role: "system" as const,
+          content: buildSystemPrompt(outputSchema, withSearch),
+        },
+        { role: "user" as const, content: promptText },
+      ],
+      temperature: LIVE_TEMPERATURE,
+      max_tokens: resolveMaxTokens(LIVE_MAX_TOKENS),
+      response_format: { type: "json_object" as const },
+      ...(withSearch
+        ? { web_search_options: { search_context_size: "medium" as const } }
+        : {}),
+    };
+    let content = "";
+    let finishReason = "unknown";
+    let usage: AiUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+    if (options.onDelta) {
+      const stream = await client.chat.completions.create(
+        { ...requestBody, stream: true },
+        { timeout: LIVE_TIMEOUT_MS },
+      );
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+        const deltaText = delta?.content ?? "";
+        const deltaReasoning = reasoningFromDelta(delta);
+        content += deltaText;
+        if (chunk.choices[0]?.finish_reason) {
+          finishReason = chunk.choices[0].finish_reason;
+        }
+        if (chunk.usage) {
+          usage = {
+            inputTokens: chunk.usage.prompt_tokens ?? 0,
+            outputTokens: chunk.usage.completion_tokens ?? 0,
+            totalTokens: chunk.usage.total_tokens ?? 0,
+          };
+        }
+        if (deltaText || deltaReasoning) {
+          await options.onDelta({
+            text: deltaText,
+            reasoning: deltaReasoning,
+          });
+        }
+      }
+    } else {
+      const completion = await client.chat.completions.create(
+        requestBody,
+        { timeout: LIVE_TIMEOUT_MS },
+      );
+      content = completion.choices[0]?.message?.content ?? "";
+      finishReason = completion.choices[0]?.finish_reason ?? "unknown";
+      usage = {
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+        totalTokens: completion.usage?.total_tokens ?? 0,
+      };
+    }
+    await dumpAiDebug(taskName, cacheKey, {
+      at: new Date().toISOString(),
+      model: config.model,
+      withSearch,
+      streamed: Boolean(options.onDelta),
+      maxTokens: resolveMaxTokens(LIVE_MAX_TOKENS),
+      finishReason,
+      prompt: promptText,
+      rawReply: content,
+      usage,
+    });
 
-    const content = completion.choices[0]?.message?.content ?? "";
     let raw: unknown;
     try {
       raw = JSON.parse(content);
     } catch {
-      throw new Error(
-        `ai_invalid_json:${taskName}: model did not return JSON`,
+      throw new AiOutputError(
+        taskName,
+        `ai_invalid_json:${taskName}: model did not return JSON (reply starts with: ${rawExcerpt(content) || "(empty)"})`,
+        content,
       );
     }
 
     const validated = outputSchema.safeParse(raw);
     if (!validated.success) {
-      throw new Error(
-        `ai_invalid_output:${taskName}: ${validated.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
+      throw new AiOutputError(
+        taskName,
+        `ai_invalid_output:${taskName}: ${validated.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ")} (reply starts with: ${rawExcerpt(content) || "(empty)"})`,
+        content,
       );
     }
 
-    return {
-      data: validated.data,
-      usage: {
-        inputTokens: completion.usage?.prompt_tokens ?? 0,
-        outputTokens: completion.usage?.completion_tokens ?? 0,
-        totalTokens: completion.usage?.total_tokens ?? 0,
-      },
-    };
+    return { data: validated.data, usage };
   }
 
   async function logFailure(message: string): Promise<void> {
@@ -389,17 +737,6 @@ async function runLive<T>(
       status: "error",
       error: message,
     });
-  }
-
-  function isUnsupportedSearchError(error: unknown): boolean {
-    if (!(error instanceof Error)) {
-      return false;
-    }
-    const status = (error as { status?: number }).status;
-    return (
-      status === 400 &&
-      /web_search|unknown.*(param|field)|unrecognized/i.test(error.message)
-    );
   }
 
   try {
@@ -420,6 +757,10 @@ async function runLive<T>(
             `web_search_unsupported:${taskName}: retrying without browsing`,
           );
           withSearch = false;
+          options.onSearchUnsupported?.();
+          if (options.noSearchPromptSuffix) {
+            promptText = `${promptText}${options.noSearchPromptSuffix}`;
+          }
           continue;
         }
         // One repair retry for malformed output only: show the model what was
@@ -430,7 +771,7 @@ async function runLive<T>(
             message.startsWith("ai_invalid_output"))
         ) {
           await logFailure(`${message} (retrying once with repair hint)`);
-          promptText = `${prompt}\n\nYour previous reply was not valid: ${message.slice(0, 300)}. Reply with ONLY the corrected JSON object.`;
+          promptText = `${promptText}\n\nYour previous reply was not valid: ${message.slice(0, 300)}. Reply with ONLY the corrected JSON object.`;
           continue;
         }
         throw error;

@@ -111,10 +111,7 @@ export async function exportWorkspaceAction(): Promise<ExportResult> {
     if (data) exports.push(data);
   }
 
-  const [catalogParts, catalogProposals] = await Promise.all([
-    prisma.catalogPart.findMany(),
-    prisma.catalogProposal.findMany(),
-  ]);
+  const catalogParts = await prisma.catalogPart.findMany();
 
   return {
     ok: true,
@@ -126,7 +123,6 @@ export async function exportWorkspaceAction(): Promise<ExportResult> {
         exportedAt: new Date().toISOString(),
         projects: exports,
         catalogParts,
-        catalogProposals,
       },
       null,
       2,

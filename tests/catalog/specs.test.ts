@@ -18,6 +18,29 @@ test("a well-formed specs object passes through", () => {
   }
 });
 
+test("unit-suffixed strings coerce instead of being dropped", () => {
+  for (const [specs, expected] of [
+    [{ supplyMinV: "3.3V" }, { supplyMinV: 3.3 }],
+    [{ supplyMaxV: "5V5" }, { supplyMaxV: 5 }],
+    [{ quiescentCurrentA: "1.6µA" }, { quiescentCurrentA: 0.0000016 }],
+    [{ currentMaxA: "82mA" }, { currentMaxA: 0.082 }],
+    [{ operatingTempMinC: "-40℃" }, { operatingTempMinC: -40 }],
+    [{ operatingTempMaxC: "77°F" }, { operatingTempMaxC: 25 }],
+    [{ batteryCapacityMah: "2500mAh" }, { batteryCapacityMah: 2500 }],
+    [{ adcBits: "16-bit" }, { adcBits: 16 }],
+    [{ priceUsd: "$0.35" }, { priceUsd: 0.35 }],
+    [{ ipRating: "IP67" }, { ipRating: 67 }],
+    [{ interfaces: "I2C, UART" }, { interfaces: ["i2c", "uart"] }],
+    [{ wireless: "Bluetooth5.0, Wi-Fi" }, { wireless: ["bluetooth", "wifi"] }],
+  ] as const) {
+    const result = validateSpecsObject(specs as unknown as Record<string, unknown>);
+    assert.ok("specs" in result, `should coerce ${JSON.stringify(specs)}`);
+    if ("specs" in result) {
+      assert.deepEqual({ ...result.specs }, expected);
+    }
+  }
+});
+
 test("unknown spec keys are rejected, not ignored", () => {
   const result = validateSpecsObject({ warpDrive: 9 });
   assert.ok("error" in result);

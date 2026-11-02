@@ -567,40 +567,12 @@ export function guessCatalogCategory(categoryPath: string[]): string | null {
   return null;
 }
 
-function parseDecimal(raw: string): number | null {
-  const match = raw.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-  return match ? Number(match[0]) : null;
-}
-
-/** "500mA" → 0.5, "10µA"/"10uA" → 0.00001, "3.3V" → 3.3, null when unknown. */
-export function parseEngineeringValue(
-  raw: string,
-  unit: "V" | "A" | "C",
-): number | null {
-  const value = parseDecimal(raw);
-  if (value === null || !Number.isFinite(value)) return null;
-  const lower = raw.toLowerCase();
-
-  if (unit === "C") {
-    const normalized = lower.replace(/℃/g, "c").replace(/℉/g, "f");
-    if (!/[cf°]|deg/.test(normalized)) return null;
-    if (normalized.includes("f") && !normalized.includes("c")) {
-      return tidy((value - 32) * (5 / 9));
-    }
-    return tidy(value);
-  }
-
-  const milli = unit === "V" ? /mv\b/ : /ma\b/;
-  const micro = /[µu]a\b/.test(lower) && unit === "A" ? true : /[µu]v\b/.test(lower) && unit === "V";
-  if (micro) return tidy(value / 1_000_000);
-  if (milli.test(lower)) return tidy(value / 1000);
-  return tidy(value);
-}
-
-/** Drop binary float dust (1.6e-6 → 0.0000016, not …161). */
-function tidy(value: number): number {
-  return Number(value.toPrecision(12));
-}
+/** Re-exported from the catalog specs module (single implementation). */
+export { normalizeWirelessToken, parseEngineeringValue } from "@/lib/catalog/specs";
+import {
+  normalizeWirelessToken,
+  parseEngineeringValue,
+} from "@/lib/catalog/specs";
 
 function splitRangeEnds(raw: string): [string, string] | null {
   for (const sep of ["~", "–", "—"]) {
@@ -729,13 +701,4 @@ export function mapLcscParametersToSpecs(
   }
 
   return specs;
-}
-
-/** Collapse "Bluetooth5.0" → "bluetooth" so scorer list-matches hit. */
-function normalizeWirelessToken(raw: string): string | null {
-  const token = raw.trim().toLowerCase();
-  if (!token) return null;
-  if (token.includes("bluetooth")) return "bluetooth";
-  if (token.includes("wifi") || token.includes("wlan")) return "wifi";
-  return token;
 }

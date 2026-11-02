@@ -8,19 +8,14 @@ import {
   buildSuggestCatalogPartsPrompt,
   SUGGEST_CATALOG_PARTS_TASK,
   suggestCatalogParts,
-  suggestCatalogPartsInputSchema,
-  type SuggestCatalogPartsOutput,
 } from "@/lib/ai/tasks/suggest_catalog_parts";
 
 const input = {
   request: "Low-power LDOs under $1.",
   categoryHint: "ldo",
-  knownMetrics: ["outputVoltageV", "quiescentCurrentA", "priceUsd"],
-  knownCategories: ["ldo", "buck"],
-  existingPartNumbers: ["AMS1117-3.3"],
 };
 
-test("suggest_catalog_parts returns a validated cache hit and logs it", async () => {
+test("suggest_catalog_parts returns cached reply text and logs it", async () => {
   const cacheDir = `/tmp/opencode/harmos-suggest-parts-${process.pid}`;
   const previousCacheDir = process.env.HARMOS_CACHE_DIR;
   const previousDemo = process.env.HARMOS_DEMO_MODE;
@@ -30,34 +25,16 @@ test("suggest_catalog_parts returns a validated cache hit and logs it", async ()
   try {
     const prompt = buildSuggestCatalogPartsPrompt(input);
     const key = taskCacheKey(
-      SUGGEST_CATALOG_PARTS_TASK,
+      `${SUGGEST_CATALOG_PARTS_TASK}/text`,
       prompt,
-      suggestCatalogPartsInputSchema,
+      (await import("zod")).z.object({}),
     );
-    const cached: SuggestCatalogPartsOutput = {
-      candidates: [
-        {
-          partNumber: "TEST-999",
-          manufacturer: "Test Works",
-          category: "ldo",
-          description: "A test LDO.",
-          package: "SOT-23-5",
-          datasheetUrl: "https://example.com/ds.pdf",
-          sourceUrl: "https://example.com/p",
-          specs: { outputVoltageV: 3.3 },
-          priceUsd: 0.35,
-          tags: ["ldo"],
-          confidence: "medium",
-          note: "Fits the brief.",
-        },
-      ],
-    };
-
+    const cached = "TPS7A02 — Texas Instruments LDO, SOT-23-5.";
     await writeTaskCache(SUGGEST_CATALOG_PARTS_TASK, key, cached);
 
     const result = await suggestCatalogParts(input);
 
-    assert.deepEqual(result, cached);
+    assert.equal(result, cached);
 
     const log = await readFile(
       path.resolve(process.cwd(), "logs", "ai.log"),
@@ -83,11 +60,14 @@ test("suggest_catalog_parts returns a validated cache hit and logs it", async ()
   }
 });
 
-test("the prompt carries guardrails and the existing catalog", () => {
+test("the prompt is a plain request for readable text, never JSON", () => {
   const prompt = buildSuggestCatalogPartsPrompt(input);
 
-  assert.match(prompt, /never invent one/i);
-  assert.match(prompt, /known list/i);
-  assert.match(prompt, /AMS1117-3\.3/);
-  assert.match(prompt, /ldo/);
+  assert.doesNotMatch(prompt, /JSON/);
+  assert.doesNotMatch(prompt, /{"candidates"/);
+  assert.doesNotMatch(prompt, /known list/i);
+  assert.match(prompt, /Propose 1-6 real, orderable/);
+  assert.match(prompt, /Low-power LDOs under \$1\./);
+  assert.match(prompt, /Category hint: ldo/);
+  assert.match(prompt, /Never invent/);
 });

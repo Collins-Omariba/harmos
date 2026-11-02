@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { createResourceAction, deleteResourceAction, fetchResourceDetails, importCatalogResourcesAction, runResourceSelectionAction, setResourceSelectionAction, updateResourceAction } from "@/app/actions/research";
+import { AiProgress } from "@/components/ai-progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -512,6 +513,10 @@ export function ResearchManager({
             <AddResourceDialog projectId={projectId} />
           </div>
         </div>
+
+        {selecting ? (
+          <AiProgress label="Selecting sources with AI" className="mt-3" />
+        ) : null}
 
         {message ? (
           <p

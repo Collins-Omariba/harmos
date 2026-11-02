@@ -1,13 +1,9 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { Check, Sparkles, X } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Copy, Sparkles } from "lucide-react";
 
-import {
-  approveCatalogProposalAction,
-  proposeCatalogPartsAction,
-  rejectCatalogProposalAction,
-} from "@/app/actions/catalog";
+import { AiProgress } from "@/components/ai-progress";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,40 +14,179 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { CATALOG_CATEGORIES } from "@/lib/catalog/types";
-import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { Field, HiddenFields, TextArea, TextInput } from "@/components/record-dialog";
+import { Field, TextArea, TextInput } from "@/components/record-dialog";
 
-export type ProposalRow = {
-  id: string;
-  request: string;
-  note: string;
-  createdAt: Date;
-  candidate: {
-    partNumber: string;
-    manufacturer: string;
-    category: string;
-    description: string;
-    package: string;
-    datasheetUrl: string | null;
-    sourceUrl: string | null;
-    specs: Record<string, unknown>;
-    priceUsd: number | null;
-    tags: string[];
-    confidence: string;
-    note: string;
-    warnings: string[];
-  } | null;
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className="h-7 text-[11px]"
+      onClick={copy}
+    >
+      <Copy data-icon="inline-start" />
+      {copied ? "Copied" : "Copy"}
+    </Button>
+  );
+}
+
+/**
+ * Shows the model's reply verbatim so the user can transcribe parts into the
+ * add-part form by hand. Exported for tests.
+ */
+export function RawOutputBox({ text }: { text: string }) {
+  return (
+    <div className="rounded-md border border-accent/35 bg-accent/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="numeric text-[10px] uppercase tracking-[0.16em] text-accent">
+          AI suggestions — transcribe manually
+        </p>
+        <CopyButton text={text} />
+      </div>
+      <pre className="mt-2 max-h-64 overflow-auto rounded border border-border bg-background p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+        {text}
+      </pre>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+        Read through, verify anything doubtful, then add the parts you want
+        with the add-part form — the same validation applies to manual rows.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Live provider thinking, shown only when the API actually streams
+ * reasoning text. Exported for tests.
+ */
+export function ThinkingBox({ text }: { text: string }) {
+  return (
+    <details
+      open
+      className="rounded-md border border-border bg-muted/30 px-3 py-2"
+    >
+      <summary className="numeric cursor-pointer text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+        Model thinking — live from the provider
+      </summary>
+      <pre className="mt-2 max-h-40 overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        {text}
+      </pre>
+    </details>
+  );
+}
+
+type ProposeState = { ok: boolean; message: string; rawOutput?: string } | null;
+
+type StreamEvent = {
+  type?: string;
+  delta?: string;
+  message?: string;
+  rawOutput?: string;
 };
 
 function ProposeForm() {
-  const [state, formAction, pending] = useActionState(
-    proposeCatalogPartsAction,
-    null,
-  );
+  const [state, setState] = useState<ProposeState>(null);
+  const [pending, setPending] = useState(false);
+  const [liveText, setLiveText] = useState("");
+  const [liveReasoning, setLiveReasoning] = useState("");
+  const [statusText, setStatusText] = useState<string | null>(null);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setState(null);
+    setLiveText("");
+    setLiveReasoning("");
+    setStatusText("Starting…");
+
+    try {
+      const response = await fetch("/api/catalog/propose", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          request: form.get("request"),
+          categoryHint: form.get("categoryHint") || undefined,
+          sourceUrl: form.get("sourceUrl") || undefined,
+          pastedText: form.get("pastedText") || undefined,
+        }),
+      });
+      if (!response.ok || !response.body) {
+        let message = "The AI could not draft parts right now — try again.";
+        try {
+          const data = (await response.json()) as { error?: string };
+          if (data.error) message = data.error;
+        } catch {
+          // Keep the generic message.
+        }
+        setState({ ok: false, message });
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let streamEvent: StreamEvent;
+          try {
+            streamEvent = JSON.parse(line) as StreamEvent;
+          } catch {
+            continue;
+          }
+          if (streamEvent.type === "status" && streamEvent.message) {
+            setStatusText(streamEvent.message);
+          } else if (streamEvent.type === "reasoning" && streamEvent.delta) {
+            setLiveReasoning((current) => current + streamEvent.delta);
+          } else if (streamEvent.type === "text" && streamEvent.delta) {
+            setLiveText((current) => current + streamEvent.delta);
+          } else if (streamEvent.type === "done") {
+            setState({
+              ok: true,
+              message: streamEvent.message ?? "Done.",
+              rawOutput: streamEvent.rawOutput,
+            });
+          } else if (streamEvent.type === "error") {
+            setState({
+              ok: false,
+              message: streamEvent.message ?? "The AI call failed.",
+            });
+          }
+        }
+        if (done) break;
+      }
+    } catch {
+      setState({
+        ok: false,
+        message: "Could not reach the AI endpoint — try again.",
+      });
+    } finally {
+      setPending(false);
+      setStatusText(null);
+    }
+  }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-4">
       <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
         <Field label="Manufacturer or datasheet link (recommended)" htmlFor="proposal-url">
           <TextInput
@@ -62,9 +197,9 @@ function ProposeForm() {
           />
         </Field>
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-          Paste the product page or datasheet PDF link and the AI drafts from
-          the real specs instead of memory. Scanned PDFs have no readable text
-          — paste their key table below in that case.
+          Paste the product page or datasheet PDF link and the AI reads the
+          real specs instead of answering from memory. Scanned PDFs have no
+          readable text — paste their key table below in that case.
         </p>
       </div>
       <Field label="What should the catalog grow with?" htmlFor="proposal-request">
@@ -101,6 +236,28 @@ function ProposeForm() {
           </select>
         </Field>
       </div>
+      {pending ? (
+        <div className="space-y-2">
+          <AiProgress label="Drafting catalog parts" />
+          {statusText ? (
+            <p className="text-[11px] text-muted-foreground">{statusText}</p>
+          ) : null}
+          {!liveReasoning && !liveText ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              No thinking text yet — this provider usually keeps its reasoning
+              hidden. The moment it starts writing, the answer streams in
+              below.
+            </p>
+          ) : null}
+          {liveReasoning ? <ThinkingBox text={liveReasoning} /> : null}
+          {liveText ? (
+            <pre className="max-h-64 overflow-auto rounded-md border border-border bg-background p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+              {liveText}
+              <span className="ml-0.5 animate-pulse">▍</span>
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
       {state ? (
         <p
           className={cn(
@@ -113,6 +270,12 @@ function ProposeForm() {
           {state.message}
         </p>
       ) : null}
+      {!pending && (state?.rawOutput || liveText) ? (
+        <>
+          {liveReasoning ? <ThinkingBox text={liveReasoning} /> : null}
+          <RawOutputBox text={state?.rawOutput || liveText} />
+        </>
+      ) : null}
       <div className="flex justify-end">
         <Button type="submit" disabled={pending}>
           <Sparkles data-icon="inline-start" />
@@ -120,19 +283,15 @@ function ProposeForm() {
         </Button>
       </div>
       <p className="text-[11px] leading-relaxed text-muted-foreground">
-        Drafts land below for review. Nothing enters the catalog until you
-        approve it — invalid specs, invented URLs, and duplicates are filtered
-        out first, and every filter is shown.
+        The AI&apos;s reply shows up right here as readable text — nothing is
+        written to the catalog. Transcribe the parts you want with the
+        add-part form below.
       </p>
     </form>
   );
 }
 
-export function CatalogProposer({ proposals }: { proposals: ProposalRow[] }) {
-  const [, approveAction] = useActionState(approveCatalogProposalAction, null);
-  const [, rejectAction] = useActionState(rejectCatalogProposalAction, null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-
+export function CatalogProposer() {
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card/70 p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -144,12 +303,9 @@ export function CatalogProposer({ proposals }: { proposals: ProposalRow[] }) {
             Propose parts with AI
           </h2>
         </div>
-        <span className="numeric text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-          {proposals.length} awaiting review
-        </span>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog>
         <DialogTrigger asChild>
           <Button variant="outline" size="sm">
             <Sparkles data-icon="inline-start" />
@@ -166,94 +322,6 @@ export function CatalogProposer({ proposals }: { proposals: ProposalRow[] }) {
           <ProposeForm />
         </DialogContent>
       </Dialog>
-
-      {proposals.length > 0 ? (
-        <ul className="divide-y divide-border border-y border-border">
-          {proposals.map((proposal) => (
-            <li key={proposal.id} className="py-3">
-              {proposal.candidate ? (
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {proposal.candidate.partNumber}
-                      <span className="ml-2 font-normal text-muted-foreground">
-                        {proposal.candidate.manufacturer} ·{" "}
-                        {proposal.candidate.category}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {proposal.candidate.description}
-                    </p>
-                    <p className="numeric mt-1 text-[11px] text-muted-foreground">
-                      {Object.keys(proposal.candidate.specs).length} specs ·{" "}
-                      {proposal.candidate.priceUsd !== null
-                        ? `$${proposal.candidate.priceUsd.toFixed(2)}`
-                        : "price unknown"}{" "}
-                      · confidence {proposal.candidate.confidence}
-                    </p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-foreground/80">
-                      {proposal.candidate.note}
-                    </p>
-                    {proposal.candidate.warnings.length > 0 ||
-                    proposal.note ? (
-                      <p className="mt-1 text-[11px] leading-relaxed text-accent">
-                        {[proposal.note, ...proposal.candidate.warnings]
-                          .filter(Boolean)
-                          .join(" ")}
-                      </p>
-                    ) : null}
-                    {!proposal.candidate.datasheetUrl ? (
-                      <p className="mt-1 text-[11px] text-destructive">
-                        No datasheet URL — approval is blocked until one is
-                        added. Add the part manually instead.
-                      </p>
-                    ) : null}
-                    <p className="numeric mt-1 text-[10px] text-muted-foreground">
-                      proposed {formatDate(proposal.createdAt)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <form action={approveAction}>
-                      <HiddenFields fields={{ recordId: proposal.id }} />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        title="Validate once more and add to the catalog"
-                      >
-                        <Check data-icon="inline-start" />
-                        Approve
-                      </Button>
-                    </form>
-                    <form action={rejectAction}>
-                      <HiddenFields fields={{ recordId: proposal.id }} />
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-[11px] text-muted-foreground hover:text-destructive"
-                      >
-                        <X data-icon="inline-start" />
-                        Reject
-                      </Button>
-                    </form>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-xs text-destructive">
-                  Proposal data is unreadable — reject it.
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          The review queue is empty. Describe what the catalog is missing above
-          and the AI will draft entries for your approval.
-        </p>
-      )}
     </div>
   );
 }

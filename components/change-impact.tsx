@@ -22,6 +22,7 @@ import {
   type GraphActionState,
   type ImpactPreviewResult,
 } from "@/app/actions/graph";
+import { AiProgress } from "@/components/ai-progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CatalogPart } from "@/lib/catalog/types";
@@ -478,6 +479,10 @@ export function ChangeImpact({
                     <Repeat data-icon="inline-start" />
                     {previewPending ? "Computing impact..." : "Preview swap impact"}
                   </Button>
+
+                  {previewPending ? (
+                    <AiProgress label="Computing impact, then asking the AI to explain it" />
+                  ) : null}
 
                   {preview?.ok === false ? (
                     <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">

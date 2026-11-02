@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { Check, ListChecks } from "lucide-react";
 
 import { runComparisonAction } from "@/app/actions/comparison";
+import { AiProgress } from "@/components/ai-progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { CatalogPart } from "@/lib/catalog/types";
@@ -225,6 +226,13 @@ export function ComparisonRunner({
               Up to {MAX_SELECTED} candidates per run.
             </span>
           </div>
+
+          {pending ? (
+            <AiProgress
+              label="Scoring parts, then asking the AI to explain"
+              className="mt-3"
+            />
+          ) : null}
 
           {state ? (
             <p

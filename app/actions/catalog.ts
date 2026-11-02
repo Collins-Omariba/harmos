@@ -4,27 +4,34 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { suggestCatalogParts } from "@/lib/ai/tasks/suggest_catalog_parts";
-import { validateProposalCandidate } from "@/lib/catalog/proposals";
 import { fetchPageText, normalizeUrl } from "@/lib/fetch-page";
 import {
   specsFromFormEntries,
   splitTags,
   validateSpecsObject,
 } from "@/lib/catalog/specs";
-import {
-  CATALOG_CATEGORY_KEYS,
-  isCatalogCategory,
-} from "@/lib/catalog/types";
-import { COMPARISON_METRICS } from "@/lib/comparison/metrics";
+import { isCatalogCategory } from "@/lib/catalog/types";
 import { prisma } from "@/lib/db";
 
 export type CatalogActionState = {
   ok: boolean;
   message: string;
+  /**
+   * The model's reply text for the propose action, shown verbatim so the
+   * user can transcribe parts into the add-part form by hand.
+   */
+  rawOutput?: string | null;
 } | null;
 
 function fail(message: string): CatalogActionState {
   return { ok: false, message };
+}
+
+/** Cap raw model text so a runaway reply can't blow up the dialog state. */
+function truncateRawOutput(raw: string, maxChars = 12_000): string {
+  const trimmed = raw.trim();
+  if (trimmed.length <= maxChars) return trimmed;
+  return `${trimmed.slice(0, maxChars)}\n… [truncated — full text in logs/ai.log]`;
 }
 
 function done(message: string): CatalogActionState {
@@ -285,153 +292,38 @@ export async function proposeCatalogPartsAction(
       ? parsed.data.categoryHint
       : null;
 
-  const existing = await prisma.catalogPart.findMany({
-    select: { partNumber: true },
-  });
-  const existingNumbers = new Set(
-    existing.map((row) => row.partNumber.toLowerCase()),
-  );
-
-  let drafts;
+  let text: string;
   try {
-    const result = await suggestCatalogParts({
-      request,
-      categoryHint,
-      knownMetrics: COMPARISON_METRICS.map((metric) => metric.metric),
-      knownCategories: [...CATALOG_CATEGORY_KEYS],
-      existingPartNumbers: existing.map((row) => row.partNumber),
-    });
-    drafts = result.candidates;
+    text = await suggestCatalogParts({ request, categoryHint });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("AI_API_KEY")) {
+      return fail("Set AI_API_KEY in .env to propose parts with the AI.");
+    }
+    if (
+      error instanceof Error &&
+      error.message.startsWith("ai_empty_reply") &&
+      error.message.includes("finish_reason=length")
+    ) {
+      return fail(
+        "The model returned no visible text: it used its whole output budget on hidden reasoning. Raise AI_MAX_TOKENS in .env if your provider allows more, switch to a non-reasoning AI_MODEL, or add the part manually below.",
+      );
+    }
     return fail(
-      error instanceof Error && error.message.includes("AI_API_KEY")
-        ? "Set AI_API_KEY in .env to propose parts with the AI."
+      error instanceof Error
+        ? `The AI call failed: ${error.message.slice(0, 200)}`
         : "The AI could not draft parts right now — try again, or add the row manually below.",
     );
   }
 
-  if (drafts.length === 0) {
-    return fail("The model returned no candidates. Rephrase the request.");
-  }
-
-  const stored: string[] = [];
-  const rejected: string[] = [];
-
-  for (const draft of drafts) {
-    const checked = validateProposalCandidate(draft, existingNumbers);
-    if ("error" in checked) {
-      rejected.push(checked.error);
-      continue;
-    }
-    existingNumbers.add(checked.candidate.partNumber.toLowerCase());
-    await prisma.catalogProposal.create({
-      data: {
-        request: parsed.data.request,
-        payloadJson: JSON.stringify(checked.candidate),
-        note: checked.candidate.warnings.join(" "),
-      },
-    });
-    stored.push(checked.candidate.partNumber);
-  }
-
-  revalidatePath("/catalog");
-
-  if (stored.length === 0) {
+  if (!text.trim()) {
     return fail(
-      `All ${rejected.length} draft${rejected.length === 1 ? " was" : "s were"} rejected: ${rejected[0] ?? "no usable specs"}`,
+      "The model returned no text. Rephrase the request and try again.",
     );
   }
 
   return {
     ok: true,
-    message: `Staged ${stored.length} proposal${stored.length === 1 ? "" : "s"} for review${rejected.length > 0 ? ` (${rejected.length} rejected).` : "."}${fetchNote ? ` Link note: ${fetchNote}` : ""}`,
+    message: `Here's what the model suggested — verify everything against a datasheet, then copy what you want into the add-part form below.${fetchNote ? ` Link note: ${fetchNote}.` : ""}`,
+    rawOutput: truncateRawOutput(text),
   };
-}
-
-export async function approveCatalogProposalAction(
-  _previous: CatalogActionState,
-  formData: FormData,
-): Promise<CatalogActionState> {
-  const recordId = String(formData.get("recordId") ?? "");
-
-  const proposal = await prisma.catalogProposal.findUnique({
-    where: { id: recordId },
-  });
-  if (!proposal || proposal.status !== "pending") {
-    return fail("Proposal not found or already handled.");
-  }
-
-  let candidate: unknown;
-  try {
-    candidate = JSON.parse(proposal.payloadJson);
-  } catch {
-    return fail("Proposal data is corrupt; reject it.");
-  }
-
-  const existing = await prisma.catalogPart.findMany({
-    select: { partNumber: true },
-  });
-  const checked = validateProposalCandidate(
-    candidate as Parameters<typeof validateProposalCandidate>[0],
-    new Set(existing.map((row) => row.partNumber.toLowerCase())),
-  );
-  if ("error" in checked) {
-    return fail(`Cannot approve: ${checked.error}`);
-  }
-
-  const { warnings: _warnings, ...fields } = checked.candidate;
-  void _warnings;
-
-  if (!fields.datasheetUrl) {
-    return fail(
-      "Approval needs a real datasheet URL — reject this proposal or add the part manually with its source.",
-    );
-  }
-
-  try {
-    await prisma.$transaction([
-      prisma.catalogPart.create({
-        data: {
-          id: `cat-agent-${crypto.randomUUID().slice(0, 8)}`,
-          partNumber: fields.partNumber,
-          manufacturer: fields.manufacturer,
-          category: fields.category,
-          description: fields.description,
-          package: fields.package,
-          datasheetUrl: fields.datasheetUrl,
-          sourceUrl: fields.sourceUrl ?? fields.datasheetUrl,
-          sourceRetrievedAt: new Date(),
-          priceUsd: fields.priceUsd,
-          specsJson: JSON.stringify(fields.specs),
-          tags: fields.tags.join(", "),
-          origin: "agent",
-        },
-      }),
-      prisma.catalogProposal.update({
-        where: { id: recordId },
-        data: { status: "applied" },
-      }),
-    ]);
-  } catch {
-    return fail("Could not apply the proposal (is the part number taken?).");
-  }
-
-  return done(`Added ${fields.partNumber} to the catalog.`);
-}
-
-export async function rejectCatalogProposalAction(
-  _previous: CatalogActionState,
-  formData: FormData,
-): Promise<CatalogActionState> {
-  const recordId = String(formData.get("recordId") ?? "");
-
-  const deleted = await prisma.catalogProposal.deleteMany({
-    where: { id: recordId, status: "pending" },
-  });
-
-  if (deleted.count === 0) {
-    return fail("Proposal not found or already handled.");
-  }
-
-  return done("Proposal rejected.");
 }

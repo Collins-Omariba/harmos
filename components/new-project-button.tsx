@@ -8,6 +8,7 @@ import {
   suggestConstraintsAction,
   type SuggestState,
 } from "@/app/actions/projects";
+import { AiProgress } from "@/components/ai-progress";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -258,6 +259,10 @@ export function NewProjectButton({ className }: { className?: string }) {
               </Button>
             </div>
 
+            {suggesting ? (
+              <AiProgress label="Predicting extra constraints" className="mt-3" />
+            ) : null}
+
             {suggestError ? (
               <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 {suggestError}
@@ -313,6 +318,10 @@ export function NewProjectButton({ className }: { className?: string }) {
             </p>
           ) : null}
         </div>
+
+        {creating ? (
+          <AiProgress label="Creating your project — saving it, scoring the first comparison, then asking the AI to explain it" />
+        ) : null}
 
         <DialogFooter>
           <p className="mr-auto text-[11px] leading-relaxed text-muted-foreground">

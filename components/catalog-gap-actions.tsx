@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { Sparkles } from "lucide-react";
 
 import { proposeCatalogPartsAction } from "@/app/actions/catalog";
+import { AiProgress } from "@/components/ai-progress";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +40,9 @@ export function DraftMissingPartButton({
           {pending ? "Drafting..." : "Draft missing"}
         </Button>
       </form>
+      {pending ? (
+        <AiProgress label="Drafting parts" compact className="max-w-64" />
+      ) : null}
       {state ? (
         <span
           className={cn(

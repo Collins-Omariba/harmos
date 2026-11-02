@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { SendHorizonal, Sparkles } from "lucide-react";
 
 import { askAssistantAction, type AskResult } from "@/app/actions/assistant";
+import { AiProgress } from "@/components/ai-progress";
 import {
   Dialog,
   DialogContent,
@@ -176,9 +177,7 @@ export function AssistantDialog({
             )
           )}
           {pending ? (
-            <p className="numeric animate-pulse text-xs text-muted-foreground">
-              Looking through your project data…
-            </p>
+            <AiProgress label="Looking through your project data" />
           ) : null}
         </div>
 

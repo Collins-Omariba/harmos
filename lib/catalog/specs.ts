@@ -5,6 +5,83 @@ const KNOWN_SPECS = new Set(
   COMPARISON_METRICS.map((metric) => metric.metric),
 );
 
+function parseLeadingNumber(raw: string): number | null {
+  const match = raw.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+/** Drop binary float dust (1.6e-6 → 0.0000016, not …161). */
+function tidy(value: number): number {
+  return Number(value.toPrecision(12));
+}
+
+/**
+ * Parse an engineering value with units ("3.3V", "500mA", "10µA", "-40℃",
+ * "77°F"). Shared by distributor imports and AI drafts so sloppy-but-clear
+ * values coerce instead of being dropped.
+ */
+export function parseEngineeringValue(
+  raw: string,
+  unit: "V" | "A" | "C",
+): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+  const value = parseLeadingNumber(trimmed);
+  if (value === null || !Number.isFinite(value)) return null;
+  const lower = trimmed.toLowerCase();
+
+  if (unit === "C") {
+    const normalized = lower.replace(/℃/g, "c").replace(/℉/g, "f");
+    if (!/[cf°]|deg/.test(normalized)) return null;
+    if (normalized.includes("f") && !normalized.includes("c")) {
+      return tidy((value - 32) * (5 / 9));
+    }
+    return tidy(value);
+  }
+
+  const milli = unit === "V" ? /mv\b/ : /ma\b/;
+  const micro = /[µu]a\b/.test(lower) && unit === "A" ? true : /[µu]v\b/.test(lower) && unit === "V";
+  if (micro) return tidy(value / 1_000_000);
+  if (milli.test(lower)) return tidy(value / 1000);
+  return tidy(value);
+}
+
+/**
+ * Collapse wireless tokens to the canonical names the scorer matches
+ * ("Bluetooth5.0" → "bluetooth", "Wi-Fi" → "wifi"). Unknown tokens pass
+ * through lowercased.
+ */
+export function normalizeWirelessToken(raw: string): string | null {
+  const token = raw.trim().toLowerCase();
+  if (!token) return null;
+  const compact = token.replace(/[^a-z0-9]/g, "");
+  if (compact.includes("bluetooth")) return "bluetooth";
+  if (compact.includes("wifi") || compact.includes("wlan")) return "wifi";
+  if (compact.includes("zigbee")) return "zigbee";
+  if (compact.includes("lora")) return "lora";
+  if (compact.includes("lte")) return "lte";
+  return token;
+}
+
+/**
+ * Coerce a user- or model-supplied spec value to the number its metric
+ * expects. Accepts plain numbers plus unit-suffixed strings ("3.3V",
+ * "82mA", "-40℃", "77°F", "$0.35", "16-bit", "2500mAh"). Returns null when
+ * nothing numeric can be salvaged.
+ */
+export function coerceSpecNumber(metric: string, raw: unknown): number | null {
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : null;
+  }
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+
+  const unit = getMetricDef(metric)?.units[0];
+  if (unit === "V" || unit === "A" || unit === "C") {
+    return parseEngineeringValue(raw, unit);
+  }
+  return parseLeadingNumber(raw.trim());
+}
+
 /**
  * Validates a user-supplied specs object before it reaches the database.
  * Keys must be known metric names (the same universe the scorer and the
@@ -30,10 +107,54 @@ export function validateSpecsObject(value: unknown):
     }
 
     if (def.valueType === "number") {
-      if (typeof entry !== "number" || !Number.isFinite(entry)) {
-        return { error: `Spec "${key}" must be a finite number.` };
+      const coerced = coerceSpecNumber(key, entry);
+      if (coerced === null) {
+        return {
+          error: `Spec "${key}" must be a number (e.g. "3.3V" works; ${JSON.stringify(entry)?.slice(0, 32) ?? "?" } has no number in it).`,
+        };
       }
-      (specs as Record<string, number>)[key] = entry;
+      (specs as Record<string, number>)[key] = coerced;
+      continue;
+    }
+
+    if (def.metric === "interfaces" || def.metric === "wireless") {
+      if (
+        Array.isArray(entry) &&
+        entry.every(
+          (item): item is string =>
+            typeof item === "string" && item.trim() !== "",
+        )
+      ) {
+        (specs as Record<string, string[]>)[key] = (() => {
+          const tokens = entry
+            .map((item) => item.trim().toLowerCase())
+            .filter(Boolean);
+          return def.metric === "wireless"
+            ? tokens
+                .map(normalizeWirelessToken)
+                .filter((t): t is string => t !== null)
+            : [...new Set(tokens)];
+        })();
+      } else if (typeof entry === "string") {
+        const rawTokens = entry
+          .split(/[,;|\n]/)
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean);
+        const tokens =
+          def.metric === "wireless"
+            ? rawTokens
+                .map(normalizeWirelessToken)
+                .filter((t): t is string => t !== null)
+            : [...new Set(rawTokens)];
+        if (tokens.length === 0) {
+          return { error: `Spec "${key}" must not be empty.` };
+        }
+        (specs as Record<string, string[]>)[key] = tokens;
+      } else {
+        return {
+          error: `Spec "${key}" must be a string or a string array.`,
+        };
+      }
       continue;
     }
 
