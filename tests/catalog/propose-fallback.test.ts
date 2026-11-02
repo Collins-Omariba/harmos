@@ -104,5 +104,4 @@ test("the raw-output box renders the text and a copy action", () => {
   );
   assert.ok(html.includes("TPS7A02 SOT-23-5"), "shows the model text");
   assert.ok(html.includes("Copy"), "offers a copy action");
-  assert.ok(html.includes("transcribe manually"), "explains the manual path");
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 
 import {
   addCatalogComponentsAction,
@@ -9,6 +9,8 @@ import {
   deleteComponentAction,
   updateComponentAction,
 } from "@/app/actions/records";
+import { AiProgress } from "@/components/ai-progress";
+import { RawOutputBox, ThinkingBox } from "@/components/catalog-proposer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,6 +123,153 @@ function ComponentFields({ component }: { component?: ComponentRow }) {
         />
       </Field>
     </>
+  );
+}
+
+type ProposeStreamEvent = {
+  type?: string;
+  delta?: string;
+  message?: string;
+  rawOutput?: string;
+};
+
+/**
+ * AI part search inside the Add component dialog: describe what the project
+ * needs, get the model's reply as plain text (streamed from the same
+ * /api/catalog/propose endpoint the catalog proposer uses), then transcribe
+ * the part into the component fields below by hand. Nothing is filled or
+ * saved automatically. Exported for tests.
+ */
+export function AiComponentProposeBox() {
+  const [request, setRequest] = useState("");
+  const [pending, setPending] = useState(false);
+  const [liveText, setLiveText] = useState("");
+  const [liveReasoning, setLiveReasoning] = useState("");
+  const [result, setResult] = useState<{
+    ok: boolean;
+    message: string;
+    rawOutput?: string;
+  } | null>(null);
+
+  async function search() {
+    const trimmed = request.trim();
+    if (pending || trimmed.length < 10) return;
+    setPending(true);
+    setResult(null);
+    setLiveText("");
+    setLiveReasoning("");
+
+    try {
+      const response = await fetch("/api/catalog/propose", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ request: trimmed }),
+      });
+      if (!response.ok || !response.body) {
+        let message = "The AI could not draft parts right now — try again.";
+        try {
+          const data = (await response.json()) as { error?: string };
+          if (data.error) message = data.error;
+        } catch {
+          // Keep the generic message.
+        }
+        setResult({ ok: false, message });
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let event: ProposeStreamEvent;
+          try {
+            event = JSON.parse(line) as ProposeStreamEvent;
+          } catch {
+            continue;
+          }
+          if (event.type === "reasoning" && event.delta) {
+            setLiveReasoning((current) => current + event.delta);
+          } else if (event.type === "text" && event.delta) {
+            setLiveText((current) => current + event.delta);
+          } else if (event.type === "done") {
+            setResult({
+              ok: true,
+              message: event.message ?? "Done.",
+              rawOutput: event.rawOutput,
+            });
+          } else if (event.type === "error") {
+            setResult({
+              ok: false,
+              message: event.message ?? "The AI call failed.",
+            });
+          }
+        }
+        if (done) break;
+      }
+    } catch {
+      setResult({
+        ok: false,
+        message: "Could not reach the AI endpoint — try again.",
+      });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-primary/30 bg-primary/5 p-3">
+      <Field label="Ask AI for part ideas (optional)" htmlFor="comp-ai-request">
+        <TextArea
+          id="comp-ai-request"
+          value={request}
+          onChange={(event) => setRequest(event.target.value)}
+          rows={2}
+          placeholder="Low-power LoRa MCU for a battery sensor, SOT-23 LDO under $1…"
+        />
+      </Field>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          You get readable text back — copy the part you want into the fields
+          below.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={search}
+          disabled={pending || request.trim().length < 10}
+        >
+          <Sparkles data-icon="inline-start" />
+          {pending ? "Searching…" : "Search with AI"}
+        </Button>
+      </div>
+      {pending ? (
+        <div className="space-y-2">
+          <AiProgress label="Searching for parts" />
+          {liveReasoning ? <ThinkingBox text={liveReasoning} /> : null}
+          {liveText ? (
+            <pre className="max-h-48 overflow-auto rounded-md border border-border bg-background p-2.5 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
+              {liveText}
+              <span className="ml-0.5 animate-pulse">▍</span>
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+      {!pending && result && !result.ok ? (
+        <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {result.message}
+        </p>
+      ) : null}
+      {!pending && result?.ok && result.rawOutput ? (
+        <RawOutputBox text={result.rawOutput} />
+      ) : null}
+    </div>
   );
 }
 
@@ -281,6 +430,7 @@ export function ComponentManager({
           trigger={<AddButton label="Add component" />}
         >
           <HiddenFields fields={{ projectId }} />
+          <AiComponentProposeBox />
           <ComponentFields />
         </RecordDialog>
       </div>

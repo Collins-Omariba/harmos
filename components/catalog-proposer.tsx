@@ -53,7 +53,7 @@ export function RawOutputBox({ text }: { text: string }) {
     <div className="rounded-md border border-accent/35 bg-accent/5 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="numeric text-[10px] uppercase tracking-[0.16em] text-accent">
-          AI suggestions — transcribe manually
+          AI suggestions
         </p>
         <CopyButton text={text} />
       </div>
@@ -61,8 +61,8 @@ export function RawOutputBox({ text }: { text: string }) {
         {text}
       </pre>
       <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-        Read through, verify anything doubtful, then add the parts you want
-        with the add-part form — the same validation applies to manual rows.
+        Read through, verify anything doubtful, then fill in the form here
+        with the parts you want — the same validation applies to manual rows.
       </p>
     </div>
   );
